@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>数据清洗</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
+</head>
+
+<body class="container mt-4">
+    <h3>数据清洗：缺失值处理</h3>
+    <div class="card p-3 my-3">
+        <label>选择清洗方式</label>
+        <select id="cleanType" class="form-select mb-3">
+            <option value="drop">删除缺失行</option>
+            <option value="mean">均值填充</option>
+            <option value="median">中位数填充</option>
+        </select>
+        <button id="cleanBtn" class="btn btn-success">执行清洗</button>
+        <div id="cleanTip" class="mt-2"></div>
+    </div>
+    <div class="card p-3">
+        <h5>清洗后数据预览</h5>
+        <div id="cleanResult">原始数据未清洗</div>
+    </div>
+
+    <script>
+        $('#cleanBtn').click(function () {
+            let type = $('#cleanType').val();
+            $.ajax({
+                url: '/clean', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ method: type }),
+                success(res) {
+                    $('#cleanTip').html('<span class="text-success">清洗完成</span>');
+                    let html = '<table class="table">';
+                    res.data.columns.forEach(c => html += `<th>${c}</th>`);
+                    res.data.rows.forEach(r => { html += '<tr>'; r.forEach(d => html += `<td>${d}</td>`); html += '</tr>' })
+                    $('#cleanResult').html(html);
+                }
+            })
+        })
+    </script>
+</body>
+
+</html>

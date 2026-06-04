@@ -4,8 +4,6 @@ import io
 from sklearn.linear_model import LinearRegression
 
 app = Flask(__name__)
-
-# 全局变量存储当前数据
 current_df = None
 
 @app.route('/')
@@ -141,5 +139,22 @@ def export():
     output.seek(0)
     return send_file(output, mimetype='text/csv', as_attachment=True, download_name='cleaned_data.csv')
 
+@app.route('/upload.html')
+def go_upload():
+    return render_template("upload.html")
+
+@app.route('/clean.html')
+def go_clean():
+    return render_template("clean.html")
+
+@app.route('/view.html')
+def go_view():
+    return render_template("view.html")
+
+@app.route('/analyze.html')
+def go_analyze():
+    return render_template("analyze.html")
+
 if __name__ == '__main__':
     app.run(debug=True)
+    
