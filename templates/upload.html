@@ -376,6 +376,9 @@
             currentShape = data.shape || [0, 0];
             currentFilename = data.filename || '';
 
+            // 保存列名到 localStorage，供可视化/分析页面使用
+            localStorage.setItem('cols', JSON.stringify(currentColumns));
+
             document.getElementById('uploadHint').textContent = '✅ 已加载: ' + currentFilename;
             setBadge('已加载', 'success');
 
