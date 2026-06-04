@@ -7,6 +7,7 @@ import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_file
 from sklearn.linear_model import LinearRegression
 from werkzeug.utils import secure_filename
+from data_cleaner import analyze_quality, apply_cleaning
 
 app = Flask(__name__)
 
@@ -254,6 +255,59 @@ def clean():
         },
         'msg': f'cleaning done, {df.shape[0]} rows x {df.shape[1]} cols'
     })
+
+
+# 数据质量分析接口（缺失值 + 异常值检测）
+@app.route('/data_quality', methods=['GET'])
+def data_quality():
+    global current_df
+    if current_df is None:
+        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
+
+    try:
+        report = analyze_quality(current_df)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'code': 500, 'msg': f'质量检测异常: {str(e)}'}), 500
+
+    return jsonify({'code': 200, 'data': report})
+
+
+# 自动清洗接口（按配置规则执行）
+@app.route('/auto_clean', methods=['POST'])
+def auto_clean():
+    global current_df
+    if current_df is None:
+        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
+
+    config = request.json
+    before_shape = current_df.shape
+
+    try:
+        current_df, result = apply_cleaning(current_df, config)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'code': 500, 'msg': f'清洗出错: {str(e)}'}), 500
+
+    after_shape = current_df.shape
+    details = '\n'.join(result['details']) if result['details'] else '无需处理'
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'columns': current_df.columns.tolist(),
+            'rows': current_df.head(10).values.tolist(),
+            'shape': list(after_shape),
+            'report': {
+                'rows_before': result['rows_before'],
+                'rows_after': result['rows_after'],
+                'rows_dropped': result['rows_dropped'],
+                'details': details
+            }
+        },
+        'msg': f'自动清洗完成：{before_shape[0]}行 → {after_shape[0]}行（移除 {result["rows_dropped"]} 行）'
+    })
+
 
 # 获取数据接口（用于图表绑定）
 @app.route('/get_data', methods=['POST'])
