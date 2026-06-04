@@ -16,7 +16,13 @@
 </head>
 
 <body class="container mt-4">
-    <h3>可视化｜自定义参数：柱状/折线/散点图</h3>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>可视化｜自定义参数：柱状/折线/散点图</h3>
+        <div class="d-flex gap-2">
+            <a href="/analyze.html" class="btn btn-outline-warning btn-sm" id="gotoAnalyze">📊 跳转回归分析</a>
+            <a href="/" class="btn btn-outline-secondary btn-sm">&larr; 返回首页</a>
+        </div>
+    </div>
     <div class="row my-3">
         <div class="col-md-3">
             <label>图表类型</label>
@@ -47,6 +53,9 @@
         $('#drawBtn').click(function () {
             var x = $('#xAxis').val(), y = $('#yAxis').val();
             if (!x || !y) { alert('请选择字段'); return; }
+            // 保存选中字段到 localStorage，供 analyze 页面使用
+            localStorage.setItem('selectedX', x);
+            localStorage.setItem('selectedY', y);
             $.ajax({
                 url: '/get_data',
                 method: 'POST',
@@ -71,10 +80,20 @@
         window.addEventListener('resize', () => chart.resize())
         //页面加载回填下拉列名
         let cols = JSON.parse(localStorage.getItem('cols') || '[]');
+        let savedX = localStorage.getItem('selectedX') || '';
+        let savedY = localStorage.getItem('selectedY') || '';
         cols.forEach(item => {
-            $('#xAxis').append(`<option value="${item}">${item}</option>`);
-            $('#yAxis').append(`<option value="${item}">${item}</option>`);
+            let selX = (item === savedX) ? ' selected' : '';
+            let selY = (item === savedY) ? ' selected' : '';
+            $('#xAxis').append(`<option value="${item}"${selX}>${item}</option>`);
+            $('#yAxis').append(`<option value="${item}"${selY}>${item}</option>`);
         })
+        // 如果有保存的字段，自动绘图
+        if (savedX && savedY) {
+            $('#xAxis').val(savedX);
+            $('#yAxis').val(savedY);
+            setTimeout(function() { $('#drawBtn').click(); }, 300);
+        }
     </script>
 </body>
 

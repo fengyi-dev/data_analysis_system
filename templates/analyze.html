@@ -9,7 +9,13 @@
 </head>
 
 <body class="container mt-4">
-    <h3>线性回归分析（R²、斜率、截距）</h3>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>线性回归分析（R²、斜率、截距）</h3>
+        <div class="d-flex gap-2">
+            <a href="/view.html" class="btn btn-outline-info btn-sm">📈 跳转可视化</a>
+            <a href="/" class="btn btn-outline-secondary btn-sm">&larr; 返回首页</a>
+        </div>
+    </div>
     <div class="row mb-3">
         <div class="col-md-4">
             <label>X自变量</label>
@@ -47,13 +53,25 @@
     <script>
         //填充下拉
         let cols = JSON.parse(localStorage.getItem('cols') || '[]');
+        let savedX = localStorage.getItem('selectedX') || '';
+        let savedY = localStorage.getItem('selectedY') || '';
         cols.forEach(c => {
-            $('#ax').append(`<option>${c}</option>`);
-            $('#ay').append(`<option>${c}</option>`);
+            let selX = (c === savedX) ? ' selected' : '';
+            let selY = (c === savedY) ? ' selected' : '';
+            $('#ax').append(`<option${selX}>${c}</option>`);
+            $('#ay').append(`<option${selY}>${c}</option>`);
         })
+        // 如果有保存的字段，自动触发分析
+        if (savedX && savedY) {
+            $('#ax').val(savedX);
+            $('#ay').val(savedY);
+        }
         //分析请求
         $('#anaBtn').click(function () {
             let x = $('#ax').val(), y = $('#ay').val();
+            // 同步保存选中字段
+            localStorage.setItem('selectedX', x);
+            localStorage.setItem('selectedY', y);
             $.ajax({
                 url: '/analyze', type: 'POST', contentType: 'application/json',
                 data: JSON.stringify({ x_col: x, y_col: y }),
@@ -64,6 +82,10 @@
                 }
             })
         })
+        // 如果有预设字段，自动分析一次
+        if (savedX && savedY) {
+            setTimeout(function() { $('#anaBtn').click(); }, 300);
+        }
     </script>
 </body>
 
