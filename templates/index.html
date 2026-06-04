@@ -198,33 +198,7 @@
             flex-wrap: wrap;
         }
 
-        /* ========== Form elements ========== */
-        .form-group {
-            margin-bottom: 12px;
-        }
-        .form-label {
-            display: block;
-            font-size: .85rem;
-            font-weight: 500;
-            margin-bottom: 4px;
-            color: var(--text-secondary);
-        }
-        .form-select,
-        .form-input {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: .875rem;
-            background: #fff;
-            transition: border-color var(--transition);
-        }
-        .form-select:focus,
-        .form-input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
-        }
+        /* ========== File input / Drag & Drop ========== */
         .file-input-wrapper {
             position: relative;
             display: flex;
@@ -239,6 +213,157 @@
             cursor: pointer;
             font-size: .85rem;
             background: #fafbfc;
+        }
+
+        /* ========== Drag & Drop Zone ========== */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--transition);
+            background: #fafbfc;
+            position: relative;
+        }
+        .drop-zone:hover {
+            border-color: var(--primary);
+            background: #f0f3ff;
+        }
+        .drop-zone.dragover {
+            border-color: var(--primary);
+            background: #eef2ff;
+            box-shadow: 0 0 0 4px rgba(79, 110, 247, .1);
+        }
+        .drop-zone .dz-icon {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .drop-zone .dz-text {
+            font-size: .95rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        .drop-zone .dz-hint {
+            font-size: .8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .drop-zone .dz-file-input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .drop-zone.has-file {
+            border-style: solid;
+            border-color: var(--success);
+            background: #f0fdf4;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-align: left;
+        }
+        .drop-zone.has-file .dz-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0;
+        }
+        .drop-zone.has-file .dz-text {
+            font-size: .85rem;
+        }
+        .drop-zone.has-file .dz-hint {
+            margin-top: 0;
+        }
+        .drop-zone .dz-file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .drop-zone .dz-file-info .fn {
+            font-weight: 600;
+            font-size: .88rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .drop-zone .dz-file-info .fs {
+            font-size: .78rem;
+            color: var(--text-secondary);
+        }
+        .drop-zone .dz-remove {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            line-height: 1;
+        }
+        .drop-zone .dz-remove:hover {
+            background: #fee2e2;
+            color: var(--danger);
+        }
+
+        /* ========== Progress Bar ========== */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+            display: none;
+        }
+        .progress-bar.active {
+            display: block;
+        }
+        .progress-bar .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--primary), #818cf8);
+            border-radius: 4px;
+            transition: width .3s ease;
+        }
+        .progress-text {
+            font-size: .78rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            display: none;
+        }
+        .progress-text.active {
+            display: block;
+        }
+
+        /* ========== Dtype badges ========== */
+        .dtype-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: .72rem;
+            font-weight: 500;
+            margin-left: 4px;
+        }
+        .dtype-num {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+        .dtype-cat {
+            background: #fef3c7;
+            color: #b45309;
+        }
+        .dtype-text {
+            background: #e2e8f0;
+            color: #475569;
+        }
+        .dtype-datetime {
+            background: #d1fae5;
+            color: #059669;
+        }
+        .dtype-other {
+            background: #f3e8ff;
+            color: #7c3aed;
         }
 
         /* ========== Table wrapper ========== */
@@ -450,16 +575,36 @@
                 <span class="icon icon-upload">📁</span> 数据上传与预览
             </div>
             <div class="card-body">
-                <div class="form-group">
-                    <label class="form-label">选择文件（支持 CSV / Excel）</label>
-                    <div class="file-input-wrapper">
-                        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
-                        <button class="btn btn-primary" id="btnUpload" onclick="uploadFile()">
-                            ⬆ 上传
-                        </button>
+                <!-- 拖拽上传区域 -->
+                <div class="drop-zone" id="dropZone">
+                    <input type="file" class="dz-file-input" id="fileInput" accept=".csv,.xlsx,.xls">
+                    <span class="dz-icon" id="dzIcon">📂</span>
+                    <div class="dz-file-info" id="dzFileInfo">
+                        <div class="dz-text" id="dzText">拖拽文件到此处，或点击选择文件</div>
+                        <div class="dz-hint">支持 CSV / Excel 格式（.csv, .xlsx, .xls），最大 100MB</div>
                     </div>
+                    <button class="dz-remove" id="dzRemove" style="display:none;" title="移除文件">✕</button>
                 </div>
+                <!-- 上传按钮 + 进度 -->
+                <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+                    <button class="btn btn-primary" id="btnUpload" onclick="uploadFile()" disabled>
+                        ⬆ 上传并预览
+                    </button>
+                    <span id="uploadHint" style="font-size:.82rem;color:var(--text-secondary);"></span>
+                </div>
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text active" id="progressText" style="margin-bottom:8px;"></div>
+
+                <!-- 统计信息 -->
                 <div id="uploadStats" class="stats-bar" style="display:none;"></div>
+                <!-- 列数据类型 -->
+                <div id="dtypeSection" style="display:none;margin-bottom:10px;">
+                    <label class="form-label">列数据类型</label>
+                    <div id="dtypeList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                </div>
+                <!-- 数据预览 -->
                 <div id="previewSection" style="display:none;">
                     <h4 style="font-size:.85rem;margin-bottom:6px;color:var(--text-secondary);">数据预览（前10行）</h4>
                     <div class="table-wrapper" id="previewTable"></div>
@@ -547,7 +692,9 @@
     <script>
         // ============ 全局状态 ============
         let currentColumns = [];
+        let currentDtypes = {};
         let currentShape = [0, 0];
+        let currentFilename = '';
         let chartInstance = null;
 
         // ============ 工具函数 ============
@@ -608,7 +755,128 @@
             });
         }
 
-        // ============ 上传文件（任务A接口） ============
+        // ============ 列类型渲染 ============
+        function getDtypeBadgeHtml(dtype) {
+            if (!dtype) return '';
+            const t = dtype.toLowerCase();
+            if (t.includes('int') || t.includes('float')) return `<span class="dtype-badge dtype-num">🔢 ${dtype}</span>`;
+            if (t.includes('object') || t.includes('str') || t.includes('string')) return `<span class="dtype-badge dtype-text">📝 ${dtype}</span>`;
+            if (t.includes('datetime') || t.includes('date') || t.includes('time')) return `<span class="dtype-badge dtype-datetime">📅 ${dtype}</span>`;
+            if (t.includes('bool')) return `<span class="dtype-badge dtype-cat">⚖️ ${dtype}</span>`;
+            if (t.includes('cat')) return `<span class="dtype-badge dtype-cat">🏷️ ${dtype}</span>`;
+            return `<span class="dtype-badge dtype-other">❓ ${dtype}</span>`;
+        }
+
+        function renderDtypes(dtypes) {
+            const container = document.getElementById('dtypeList');
+            container.innerHTML = Object.entries(dtypes)
+                .map(([col, dtype]) => `<span><strong>${col}</strong>${getDtypeBadgeHtml(dtype)}</span>`)
+                .join('');
+        }
+
+        // ============ 拖拽上传逻辑 ============
+        function setupDropZone() {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+
+            // 点击区域触发文件选择
+            dropZone.addEventListener('click', function(e) {
+                if (e.target === document.getElementById('dzRemove')) return;
+                fileInput.click();
+            });
+
+            // 拖拽事件
+            ['dragenter', 'dragover'].forEach(evt => {
+                dropZone.addEventListener(evt, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!this.classList.contains('has-file')) {
+                        this.classList.add('dragover');
+                    }
+                });
+            });
+            ['dragleave', 'drop'].forEach(evt => {
+                dropZone.addEventListener(evt, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.remove('dragover');
+                });
+            });
+
+            // 放置文件
+            dropZone.addEventListener('drop', function(e) {
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    handleFileSelected(files[0]);
+                }
+            });
+
+            // 文件选择变化
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    handleFileSelected(this.files[0]);
+                }
+            });
+
+            // 移除文件按钮
+            document.getElementById('dzRemove').addEventListener('click', function(e) {
+                e.stopPropagation();
+                clearFileSelection();
+            });
+        }
+
+        function handleFileSelected(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['csv', 'xlsx', 'xls'].includes(ext)) {
+                showToast('不支持的文件格式，请选择 CSV 或 Excel 文件', 'error');
+                clearFileSelection();
+                return;
+            }
+
+            // 检查文件大小（100MB）
+            if (file.size > 100 * 1024 * 1024) {
+                showToast('文件过大，最大支持 100MB', 'error');
+                clearFileSelection();
+                return;
+            }
+
+            // 更新拖拽区域显示文件信息
+            const dropZone = document.getElementById('dropZone');
+            dropZone.classList.add('has-file');
+            document.getElementById('dzIcon').textContent = '📄';
+            document.getElementById('dzText').textContent = file.name;
+
+            // 格式化文件大小
+            const size = file.size;
+            let sizeStr = '';
+            if (size < 1024) sizeStr = size + ' B';
+            else if (size < 1024 * 1024) sizeStr = (size / 1024).toFixed(1) + ' KB';
+            else sizeStr = (size / (1024 * 1024)).toFixed(1) + ' MB';
+            document.getElementById('dzFileInfo').querySelector('.dz-hint').textContent = sizeStr;
+
+            document.getElementById('dzRemove').style.display = 'block';
+            document.getElementById('btnUpload').disabled = false;
+            document.getElementById('uploadHint').textContent = `已选择: ${file.name}`;
+            setStatus(`已选择: ${file.name}`);
+
+            // 自动上传
+            uploadFile();
+        }
+
+        function clearFileSelection() {
+            document.getElementById('fileInput').value = '';
+            const dropZone = document.getElementById('dropZone');
+            dropZone.classList.remove('has-file');
+            document.getElementById('dzIcon').textContent = '📂';
+            document.getElementById('dzText').textContent = '拖拽文件到此处，或点击选择文件';
+            document.getElementById('dzFileInfo').querySelector('.dz-hint').textContent = '支持 CSV / Excel 格式（.csv, .xlsx, .xls），最大 100MB';
+            document.getElementById('dzRemove').style.display = 'none';
+            document.getElementById('btnUpload').disabled = true;
+            document.getElementById('uploadHint').textContent = '';
+        }
+
+        // ============ 上传文件（任务A核心接口） ============
         async function uploadFile() {
             const fileInput = document.getElementById('fileInput');
             const file = fileInput.files[0];
@@ -618,48 +886,127 @@
             }
 
             setStatus('上传中...');
+            document.getElementById('btnUpload').disabled = true;
+            document.getElementById('uploadHint').textContent = '上传中...';
+
+            // 显示进度条
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            progressBar.classList.add('active');
+            progressText.classList.add('active');
+            progressFill.style.width = '0%';
+            progressText.textContent = '⏳ 正在上传... 0%';
+
             const formData = new FormData();
             formData.append('file', file);
 
             try {
-                const res = await fetch('/upload', { method: 'POST', body: formData });
-                const json = await res.json();
+                // 使用 XMLHttpRequest 以支持上传进度
+                const result = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/upload', true);
+
+                    xhr.upload.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            const pct = Math.round((e.loaded / e.total) * 100);
+                            progressFill.style.width = pct + '%';
+                            progressText.textContent = `⏳ 正在上传... ${pct}%`;
+                        }
+                    };
+
+                    xhr.onload = function() {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                resolve(JSON.parse(xhr.responseText));
+                            } catch (e) {
+                                reject(new Error('响应解析失败'));
+                            }
+                        } else {
+                            try {
+                                const err = JSON.parse(xhr.responseText);
+                                reject(new Error(err.msg || '上传失败'));
+                            } catch (e) {
+                                reject(new Error(`服务器错误 (${xhr.status})`));
+                            }
+                        }
+                    };
+
+                    xhr.onerror = function() {
+                        reject(new Error('网络错误，请检查连接'));
+                    };
+
+                    xhr.ontimeout = function() {
+                        reject(new Error('上传超时'));
+                    };
+
+                    xhr.send(formData);
+                });
+
+                // 上传完成：进度 100%
+                progressFill.style.width = '100%';
+                progressText.textContent = '✅ 上传完成，正在解析...';
+
+                const json = result;
                 if (json.code !== 200) {
                     showToast(json.msg || '上传失败', 'error');
                     setStatus('就绪');
+                    progressBar.classList.remove('active');
+                    progressText.classList.remove('active');
+                    document.getElementById('btnUpload').disabled = false;
                     return;
                 }
 
                 currentColumns = json.data.columns;
+                currentDtypes = json.data.dtypes || {};
                 currentShape = json.data.shape;
+                currentFilename = json.data.filename || '';
 
-                // 显示统计
+                // 移除进度条
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                    progressText.classList.remove('active');
+                }, 600);
+
+                // 显示统计信息
                 document.getElementById('uploadStats').style.display = 'flex';
                 document.getElementById('uploadStats').innerHTML = `
+                    <span class="stat-item">📄 文件: <strong>${currentFilename}</strong></span>
                     <span class="stat-item">行数: <strong>${json.data.shape[0]}</strong></span>
                     <span class="stat-item">列数: <strong>${json.data.shape[1]}</strong></span>
-                    <span class="stat-item">列名: <strong>${json.data.columns.join(', ')}</strong></span>
                 `;
 
-                // 渲染预览
+                // 显示列数据类型
+                if (Object.keys(currentDtypes).length > 0) {
+                    document.getElementById('dtypeSection').style.display = 'block';
+                    renderDtypes(currentDtypes);
+                }
+
+                // 渲染预览表格
                 document.getElementById('previewSection').style.display = 'block';
                 renderTable('previewTable', json.data.columns, json.data.rows);
 
-                // 填充下拉框
+                // 填充图表下拉框
                 populateColumnSelects(json.data.columns);
 
                 // 启用下游按钮
                 enableButtons(['btnClean', 'btnExport']);
                 updateFlow(1);
                 showToast('✅ 上传成功！数据 ' + json.data.shape[0] + ' 行 × ' + json.data.shape[1] + ' 列', 'success');
+                document.getElementById('uploadHint').textContent = '✅ 已加载: ' + currentFilename;
                 setStatus('数据已加载');
 
                 // 初始化图表
                 initChart();
                 updateChart();
+
             } catch (err) {
                 showToast('上传失败：' + err.message, 'error');
                 setStatus('就绪');
+                progressBar.classList.remove('active');
+                progressText.classList.remove('active');
+            } finally {
+                document.getElementById('btnUpload').disabled = false;
             }
         }
 
@@ -838,16 +1185,31 @@
         // ============ 重置 ============
         function resetAll() {
             currentColumns = [];
+            currentDtypes = {};
             currentShape = [0, 0];
-            document.getElementById('fileInput').value = '';
-            document.getElementById('previewSection').style.display = 'none';
+            currentFilename = '';
+
+            // 重置文件选择
+            clearFileSelection();
+            document.getElementById('progressBar').classList.remove('active');
+            document.getElementById('progressText').classList.remove('active');
             document.getElementById('uploadStats').style.display = 'none';
+            document.getElementById('dtypeSection').style.display = 'none';
+            document.getElementById('dtypeList').innerHTML = '';
+            document.getElementById('uploadHint').textContent = '';
+
+            // 重置预览
+            document.getElementById('previewSection').style.display = 'none';
+
+            // 重置清洗
             document.getElementById('cleanPreview').style.display = 'none';
             document.getElementById('cleanMsg').textContent = '';
+
+            // 重置导出
             document.getElementById('exportMsg').textContent = '';
+
+            // 重置图表
             document.getElementById('chartHint').textContent = '请先上传数据，然后选择 X/Y 轴字段';
-            document.getElementById('btnClean').disabled = true;
-            document.getElementById('btnExport').disabled = true;
             document.getElementById('xCol').innerHTML = '';
             document.getElementById('yCol').innerHTML = '';
 
@@ -855,6 +1217,11 @@
                 chartInstance.clear();
             }
 
+            // 禁用按钮
+            document.getElementById('btnClean').disabled = true;
+            document.getElementById('btnExport').disabled = true;
+
+            // 重置流程指示器
             const steps = document.querySelectorAll('.flow-step');
             steps.forEach(s => s.className = 'flow-step');
 
@@ -864,12 +1231,8 @@
 
         // ============ 页面初始化 ============
         document.addEventListener('DOMContentLoaded', () => {
-            // 文件选择后自动显示文件名
-            document.getElementById('fileInput').addEventListener('change', function() {
-                if (this.files.length > 0) {
-                    setStatus(`已选择: ${this.files[0].name}`);
-                }
-            });
+            // 初始化拖拽上传区域
+            setupDropZone();
 
             // 响应式图表重绘
             window.addEventListener('resize', () => {
