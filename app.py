@@ -1,12 +1,10 @@
 import io
 import os
-import uuid
 import traceback
-from datetime import datetime, timedelta
 
 import chardet
 import pandas as pd
-from flask import Flask, request, jsonify, render_template, send_file, session
+from flask import Flask, request, jsonify, render_template, send_file
 from sklearn.linear_model import LinearRegression
 from werkzeug.utils import secure_filename
 from data_cleaner import analyze_quality, apply_cleaning
@@ -16,42 +14,17 @@ app = Flask(__name__)
 # 配置文件上传限制：最大 100MB
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
-# session 加密密钥（生产环境应使用环境变量）
-app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
+# 同步当前数据到 app.config（供 blueprint 使用）
+app.config['CURRENT_DF'] = None
+app.config['CURRENT_FILENAME'] = None
 
-# ========== 会话隔离存储 ==========
-# 每个浏览器会话独立的数据空间，互不影响
-_session_store = {}  # {session_id: {'df': DataFrame, 'filename': str, 'last_access': datetime}}
+# 注册可视化 blueprint（在 viz.py 中实现）
+from viz import viz_bp
+app.register_blueprint(viz_bp)
 
-SESSION_TTL_MINUTES = 30  # 会话超时时间
-
-def _cleanup_expired():
-    """清理过期会话，防止内存泄漏"""
-    cutoff = datetime.now() - timedelta(minutes=SESSION_TTL_MINUTES)
-    expired = [sid for sid, d in _session_store.items() if d['last_access'] < cutoff]
-    for sid in expired:
-        del _session_store[sid]
-
-def _get_session_data():
-    """获取当前用户的数据，无数据返回 None"""
-    _cleanup_expired()
-    sid = session.get('sid')
-    if not sid or sid not in _session_store:
-        return None
-    _session_store[sid]['last_access'] = datetime.now()
-    return _session_store[sid]
-
-def _set_session_data(df, filename):
-    """为当前用户存储数据，自动创建或复用 session ID"""
-    sid = session.get('sid')
-    if not sid:
-        sid = str(uuid.uuid4())
-        session['sid'] = sid
-    _session_store[sid] = {
-        'df': df.copy(),  # 存副本，防外部修改
-        'filename': filename,
-        'last_access': datetime.now()
-    }
+# 全局变量存储当前数据
+current_df = None
+current_filename = None
 
 ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls'}
 
@@ -150,12 +123,13 @@ def detect_delimiter(file_obj, encoding='utf-8'):
 
 @app.route('/')
 def index():
-    return render_template('upload.html')
+    return render_template('index.html')
 
 
 # 上传接口
 @app.route('/upload', methods=['POST'])
 def upload():
+    global current_df, current_filename
 
     # 校验是否有文件
     if 'file' not in request.files:
@@ -178,27 +152,31 @@ def upload():
             encoding = detect_encoding(file)
             delimiter = detect_delimiter(file, encoding)
             try:
-                df = pd.read_csv(file, encoding=encoding, delimiter=delimiter)
+                current_df = pd.read_csv(file, encoding=encoding, delimiter=delimiter)
             except UnicodeDecodeError:
                 # 编码检测失败时回退
                 file.seek(0)
-                df = pd.read_csv(file, encoding='utf-8', errors='replace', delimiter=delimiter)
+                current_df = pd.read_csv(file, encoding='utf-8', errors='replace', delimiter=delimiter)
         else:
             # Excel 文件
             try:
-                df = pd.read_excel(file, engine='openpyxl')
+                current_df = pd.read_excel(file, engine='openpyxl')
             except Exception:
                 file.seek(0)
-                df = pd.read_excel(file, engine='xlrd')
+                current_df = pd.read_excel(file, engine='xlrd')
+
+        # 记录文件名
+        current_filename = filename
 
         # 空数据检查
-        if df.empty:
+        if current_df.empty:
             return jsonify({'code': 400, 'msg': '文件为空，请检查数据'})
 
-        # 存入当前会话
-        _set_session_data(df, filename)
+        # 同步到 app.config 供可视化 blueprint 使用
+        app.config['CURRENT_DF'] = current_df
+        app.config['CURRENT_FILENAME'] = current_filename
 
-        preview = safe_json_serialize(df)
+        preview = safe_json_serialize(current_df)
         preview['filename'] = filename
 
         return jsonify({
@@ -215,20 +193,21 @@ def upload():
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'读取文件失败：{str(e)}'})
 
-# 分析接口（线性回归）
+# 分析接口
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    ss = _get_session_data()
-    if ss is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
+    global current_df
+    if current_df is None:
+        return jsonify({'code': 400, 'msg': '请先上传数据'})
 
-    current_df = ss['df']
     data = request.json
     x_col = data.get('x_col')
     y_col = data.get('y_col')
+    do_cluster = data.get('do_cluster', True)  # 是否做聚类
+    n_clusters = data.get('n_clusters', 3)
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
+        return jsonify({'code': 400, 'msg': '所选列不存在'})
 
     try:
         df = current_df[[x_col, y_col]].dropna()
@@ -236,32 +215,51 @@ def analyze():
         y = df[y_col].values
 
         if len(X) < 2:
-            return jsonify({'code': 400, 'msg': '有效数据点不足'}), 400
+            return jsonify({'code': 400, 'msg': '有效数据点不足'})
 
+        # ========== 1. 线性回归 ==========
         model = LinearRegression()
         model.fit(X, y)
         predictions = model.predict(X)
 
-        return jsonify({
-            'code': 200,
-            'data': {
+        result = {
+            'regression': {
                 'r2_score': round(model.score(X, y), 4),
                 'slope': round(model.coef_[0], 4),
                 'intercept': round(model.intercept_, 4),
                 'predictions': predictions.tolist()
             }
-        })
+        }
+
+        # ========== 2. K-Means 聚类 ==========
+        if do_cluster:
+            from sklearn.cluster import KMeans
+            X_cluster = df[[x_col, y_col]].values
+            if len(X_cluster) >= n_clusters:
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                labels = kmeans.fit_predict(X_cluster)
+                result['cluster'] = {
+                    'labels': labels.tolist(),
+                    'centers': kmeans.cluster_centers_.tolist(),
+                    'n_clusters': n_clusters,
+                    'x_values': df[x_col].values.tolist(),
+                    'y_values': df[y_col].values.tolist()
+                }
+            else:
+                result['cluster'] = {'error': f'数据点不足，至少需要{n_clusters}行'}
+
+        return jsonify({'code': 200, 'data': result})
+
     except Exception as e:
-        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'}), 400
+        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'})
 
 # 清洗接口
 @app.route('/clean', methods=['POST'])
 def clean():
-    ss = _get_session_data()
-    if ss is None:
+    global current_df
+    if current_df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
-    current_df = ss['df']
     data = request.json
     method = data.get('method', 'drop')  # drop / fill_mean / fill_median
     columns = data.get('columns', current_df.columns.tolist())
@@ -279,7 +277,10 @@ def clean():
             if col in df.columns and df[col].dtype in ('float64', 'int64'):
                 df[col] = df[col].fillna(df[col].median())
 
-    _set_session_data(df, ss['filename'])
+    current_df = df
+
+    # 同步到 app.config
+    app.config['CURRENT_DF'] = current_df
 
     return jsonify({
         'code': 200,
@@ -296,12 +297,12 @@ def clean():
 # 数据质量分析接口（缺失值 + 异常值检测）
 @app.route('/data_quality', methods=['GET'])
 def data_quality():
-    ss = _get_session_data()
-    if ss is None:
+    global current_df
+    if current_df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     try:
-        report = analyze_quality(ss['df'])
+        report = analyze_quality(current_df)
     except Exception as e:
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'质量检测异常: {str(e)}'}), 500
@@ -312,11 +313,10 @@ def data_quality():
 # 自动清洗接口（按配置规则执行）
 @app.route('/auto_clean', methods=['POST'])
 def auto_clean():
-    ss = _get_session_data()
-    if ss is None:
+    global current_df
+    if current_df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
-    current_df = ss['df']
     config = request.json
     before_shape = current_df.shape
 
@@ -326,7 +326,9 @@ def auto_clean():
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'清洗出错: {str(e)}'}), 500
 
-    _set_session_data(current_df, ss['filename'])
+    # 同步到 app.config
+    app.config['CURRENT_DF'] = current_df
+
     after_shape = current_df.shape
     details = '\n'.join(result['details']) if result['details'] else '无需处理'
 
@@ -347,63 +349,22 @@ def auto_clean():
     })
 
 
-# 获取数据接口（用于图表绑定，自动对大文件抽样）
-@app.route('/get_data', methods=['POST'])
-def get_data():
-    ss = _get_session_data()
-    if ss is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
-
-    current_df = ss['df']
-    data = request.json
-    x_col = data.get('x_col')
-    y_col = data.get('y_col')
-    max_points = data.get('max_points', 1000)  # 前端可指定最大点数，默认1000
-
-    if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
-
-    df = current_df[[x_col, y_col]].dropna()
-    total_rows = len(df)
-
-    # 数据量大时均匀抽样，保证图表清晰
-    if total_rows > max_points:
-        step = total_rows // max_points
-        # 用 iloc 做等间距抽样，保留数据分布特征
-        indices = range(0, total_rows, max(step, 1))
-        df_sampled = df.iloc[list(indices)[:max_points]]
-        sampled = True
-    else:
-        df_sampled = df
-        sampled = False
-
-    return jsonify({
-        'code': 200,
-        'data': {
-            'x_values': df_sampled[x_col].values.tolist(),
-            'y_values': df_sampled[y_col].values.tolist(),
-            'total_rows': total_rows,
-            'sampled_rows': len(df_sampled),
-            'sampled': sampled
-        }
-    })
+# 获取数据接口已迁移到 viz.py（Blueprint）
 
 
 # 导出接口
 @app.route('/export', methods=['GET'])
 def export():
-    ss = _get_session_data()
-    if ss is None:
+    global current_df, current_filename
+    if current_df is None:
         return jsonify({'code': 400, 'msg': '没有可导出的数据'}), 400
 
-    current_df = ss['df']
-    filename = ss['filename']
     output = io.BytesIO()
     current_df.to_csv(output, index=False, encoding='utf-8-sig')
     output.seek(0)
 
     # 使用原始文件名或默认名
-    download_name = filename or 'cleaned_data.csv'
+    download_name = current_filename or 'cleaned_data.csv'
     if download_name.endswith(('.xlsx', '.xls')):
         download_name = download_name.rsplit('.', 1)[0] + '.csv'
     elif not download_name.endswith('.csv'):
@@ -429,9 +390,7 @@ def go_upload():
 def go_clean():
     return render_template("clean.html")
 
-@app.route('/view.html')
-def go_view():
-    return render_template("view.html")
+# `/view.html` 路由已迁移到 `viz.py` 中的 Blueprint（保留此处注释以便追踪）
 
 @app.route('/analyze.html')
 def go_analyze():
