@@ -57,6 +57,24 @@ def analyze():
         }
     })
 
+# 获取数据接口（用于图表绑定）
+@app.route('/get_data', methods=['POST'])
+def get_data():
+    global current_df
+    data = request.json
+    x_col = data.get('x_col')
+    y_col = data.get('y_col')
+    
+    df = current_df[[x_col, y_col]].dropna()
+    return jsonify({
+        'code': 200,
+        'data': {
+            'x_values': df[x_col].values.tolist(),
+            'y_values': df[y_col].values.tolist()
+        }
+    })
+
+
 # 导出接口
 @app.route('/export', methods=['GET'])
 def export():
