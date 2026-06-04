@@ -1,180 +1,881 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>数据分析系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
     <style>
-        .chart-container {
-            height: 400px;
-            width: 100%;
+        :root {
+            --primary: #4f6ef7;
+            --primary-hover: #3b54d4;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --radius: 12px;
+            --shadow: 0 1px 3px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .04);
+            --shadow-lg: 0 4px 16px rgba(0, 0, 0, .08);
+            --transition: .2s ease;
         }
 
-        .preview-table {
-            max-height: 200px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ========== Header ========== */
+        .header {
+            background: linear-gradient(135deg, #1e3a5f 0%, #4f6ef7 100%);
+            color: #fff;
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+        }
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: .5px;
+        }
+        .header .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+            display: inline-block;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .4;
+            }
+        }
+        .header .status-text {
+            font-size: .85rem;
+            opacity: .9;
+        }
+
+        /* ========== Main Grid ========== */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px 24px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* ========== Card ========== */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: box-shadow var(--transition);
+        }
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+        .card.full-width {
+            grid-column: 1 / -1;
+        }
+        .card-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: .95rem;
+            background: #fafbfc;
+        }
+        .card-header .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        .icon-upload {
+            background: #ede9fe;
+            color: #7c3aed;
+        }
+        .icon-clean {
+            background: #fef3c7;
+            color: #d97706;
+        }
+        .icon-chart {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+        .icon-export {
+            background: #d1fae5;
+            color: #059669;
+        }
+        .card-body {
+            padding: 16px 20px;
+        }
+        .card-body.no-padding {
+            padding: 0;
+        }
+
+        /* ========== Buttons ========== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: .875rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+        }
+        .btn-success:hover:not(:disabled) {
+            background: #16a34a;
+        }
+        .btn-outline {
+            background: #fff;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-outline:hover:not(:disabled) {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: .8rem;
+            border-radius: 6px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* ========== Form elements ========== */
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-label {
+            display: block;
+            font-size: .85rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: var(--text-secondary);
+        }
+        .form-select,
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: .875rem;
+            background: #fff;
+            transition: border-color var(--transition);
+        }
+        .form-select:focus,
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
+        }
+        .file-input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-input-wrapper input[type="file"] {
+            flex: 1;
+            padding: 6px;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: .85rem;
+            background: #fafbfc;
+        }
+
+        /* ========== Table wrapper ========== */
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 320px;
             overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .82rem;
+            white-space: nowrap;
+        }
+        table th {
+            background: #f1f5f9;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            border-bottom: 2px solid var(--border);
+        }
+        table td {
+            padding: 8px 14px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        /* ========== Chart container ========== */
+        .chart-container {
+            width: 100%;
+            height: 400px;
+        }
+
+        /* ========== Stats bar ========== */
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .stat-item {
+            padding: 8px 14px;
+            border-radius: 8px;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            font-size: .82rem;
+        }
+        .stat-item strong {
+            color: var(--primary);
+        }
+
+        /* ========== Toast ========== */
+        .toast-container {
+            position: fixed;
+            top: 68px;
+            right: 20px;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            padding: 10px 18px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: .875rem;
+            animation: slideIn .3s ease;
+            max-width: 380px;
+            box-shadow: var(--shadow-lg);
+        }
+        .toast-success {
+            background: #16a34a;
+        }
+        .toast-error {
+            background: #dc2626;
+        }
+        .toast-info {
+            background: #2563eb;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* ========== Responsive ========== */
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                padding: 12px 14px;
+                gap: 14px;
+            }
+            .header {
+                padding: 0 14px;
+                height: 48px;
+            }
+            .header h1 {
+                font-size: 1.1rem;
+            }
+            .chart-container {
+                height: 300px;
+            }
+            .table-wrapper {
+                max-height: 240px;
+            }
+            .btn {
+                padding: 6px 14px;
+                font-size: .8rem;
+            }
+        }
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: .95rem;
+            }
+            .card-header {
+                padding: 10px 14px;
+                font-size: .85rem;
+            }
+            .card-body {
+                padding: 10px 14px;
+            }
+            table {
+                font-size: .72rem;
+            }
+            table th,
+            table td {
+                padding: 6px 8px;
+            }
+        }
+
+        /* ========== Flow indicator ========== */
+        .flow-steps {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            padding: 10px 0;
+            font-size: .82rem;
+            color: var(--text-secondary);
+        }
+        .flow-step {
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: #e2e8f0;
+            font-weight: 500;
+            transition: all var(--transition);
+        }
+        .flow-step.active {
+            background: var(--primary);
+            color: #fff;
+        }
+        .flow-step.done {
+            background: #d1fae5;
+            color: #059669;
+        }
+        .flow-arrow {
+            margin: 0 2px;
+            color: #94a3b8;
         }
     </style>
 </head>
-
 <body>
-    <div class="container mt-5">
-        <h1 class="text-center mb-5">数据分析系统</h1>
 
-        <!-- 文件上传 -->
-        <div class="card mb-4">
-            <div class="card-header">文件上传</div>
+    <!-- ==================== Header ==================== -->
+    <header class="header">
+        <h1>📊 数据分析系统</h1>
+        <span>
+            <span class="status-dot"></span>
+            <span class="status-text" id="statusText">就绪</span>
+        </span>
+    </header>
+
+    <!-- ==================== Toast Container ==================== -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ==================== Main Layout ==================== -->
+    <div class="main-container">
+
+        <!-- ========== 流程指示器 ========== -->
+        <div class="card full-width">
             <div class="card-body">
-                <input type="file" class="form-control" id="fileInput" accept=".csv,.xlsx,.xls">
-                <button class="btn btn-primary mt-2" id="uploadBtn">上传文件</button>
-                <div id="uploadStatus"></div>
+                <div class="flow-steps">
+                    <span class="flow-step" id="step1">① 上传数据</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step" id="step2">② 数据清洗</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step" id="step3">③ 可视化</span>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-step" id="step4">④ 导出结果</span>
+                </div>
             </div>
         </div>
 
-        <!-- 数据预览 -->
-        <div class="card mb-4">
-            <div class="card-header">数据预览</div>
-            <div class="card-body preview-table" id="dataPreview">请先上传数据</div>
+        <!-- ========== 模块1：数据上传 + 预览（任务A区域） ========== -->
+        <div class="card" id="uploadCard">
+            <div class="card-header">
+                <span class="icon icon-upload">📁</span> 数据上传与预览
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">选择文件（支持 CSV / Excel）</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+                        <button class="btn btn-primary" id="btnUpload" onclick="uploadFile()">
+                            ⬆ 上传
+                        </button>
+                    </div>
+                </div>
+                <div id="uploadStats" class="stats-bar" style="display:none;"></div>
+                <div id="previewSection" style="display:none;">
+                    <h4 style="font-size:.85rem;margin-bottom:6px;color:var(--text-secondary);">数据预览（前10行）</h4>
+                    <div class="table-wrapper" id="previewTable"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- 图表配置 -->
-        <div class="card mb-4">
-            <div class="card-header">图表配置</div>
+        <!-- ========== 模块2：数据清洗（任务B区域） ========== -->
+        <div class="card" id="cleanCard">
+            <div class="card-header">
+                <span class="icon icon-clean">🧹</span> 数据清洗
+            </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>图表类型:</label>
-                        <select class="form-select" id="chartType">
+                <div class="form-group">
+                    <label class="form-label">缺失值处理方法</label>
+                    <select class="form-select" id="cleanMethod">
+                        <option value="drop">删除含缺失值的行</option>
+                        <option value="fill_mean">均值填充（数值列）</option>
+                        <option value="fill_median">中位数填充（数值列）</option>
+                    </select>
+                </div>
+                <button class="btn btn-outline" id="btnClean" onclick="cleanData()" disabled>
+                    🔄 执行清洗
+                </button>
+                <span id="cleanMsg" style="font-size:.82rem;color:var(--text-secondary);margin-left:10px;"></span>
+                <div id="cleanPreview" style="display:none;margin-top:12px;">
+                    <div id="cleanStats" class="stats-bar"></div>
+                    <div class="table-wrapper" id="cleanTable"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 模块3：可视化（任务C区域） ========== -->
+        <div class="card full-width" id="chartCard">
+            <div class="card-header">
+                <span class="icon icon-chart">📈</span> 数据可视化
+            </div>
+            <div class="card-body">
+                <div class="btn-group" style="margin-bottom:14px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">X 轴</label>
+                        <select class="form-select" id="xCol" onchange="updateChart()" style="min-width:140px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Y 轴</label>
+                        <select class="form-select" id="yCol" onchange="updateChart()" style="min-width:140px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">图表类型</label>
+                        <select class="form-select" id="chartType" onchange="updateChart()" style="min-width:120px;">
                             <option value="bar">柱状图</option>
                             <option value="line">折线图</option>
                             <option value="scatter">散点图</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label>X轴:</label>
-                        <select class="form-select" id="xAxis" disabled></select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>Y轴:</label>
-                        <select class="form-select" id="yAxis" disabled></select>
-                    </div>
-                    <div class="col-md-3 align-self-end">
-                        <button class="btn btn-success w-100" id="drawBtn" disabled>绘制图表</button>
-                    </div>
                 </div>
+                <div class="chart-container" id="mainChart"></div>
+                <p id="chartHint" style="text-align:center;color:var(--text-secondary);font-size:.85rem;margin-top:8px;">
+                    请先上传数据，然后选择 X/Y 轴字段
+                </p>
             </div>
         </div>
 
-        <!-- 图表展示 -->
-        <div class="card mb-4">
-            <div class="card-header">图表展示</div>
+        <!-- ========== 模块4：导出 + 操作区（任务D核心） ========== -->
+        <div class="card full-width" id="exportCard">
+            <div class="card-header">
+                <span class="icon icon-export">💾</span> 数据导出与操作
+            </div>
             <div class="card-body">
-                <div id="chart" class="chart-container"></div>
+                <div class="btn-group">
+                    <button class="btn btn-success" id="btnExport" onclick="exportCSV()" disabled>
+                        📥 导出 CSV
+                    </button>
+                    <button class="btn btn-outline" onclick="resetAll()">
+                        🔃 重置全部
+                    </button>
+                </div>
+                <span id="exportMsg" style="font-size:.82rem;color:var(--text-secondary);margin-left:10px;"></span>
             </div>
         </div>
 
-        <!-- 分析结果 -->
-        <div class="card mb-4">
-            <div class="card-header">线性回归分析</div>
-            <div class="card-body" id="analysisResult">请上传数据进行分析</div>
-        </div>
-
-        <!-- 导出按钮 -->
-        <div class="text-center"><a href="/export" class="btn btn-info" id="exportBtn" disabled>导出数据</a></div>
     </div>
 
+    <!-- ==================== Scripts ==================== -->
     <script>
-        var chart = echarts.init(document.getElementById('chart'));
+        // ============ 全局状态 ============
+        let currentColumns = [];
+        let currentShape = [0, 0];
+        let chartInstance = null;
 
-        // 文件上传
-        $('#uploadBtn').click(function () {
-            var file = $('#fileInput')[0].files[0];
-            if (!file) { $('#uploadStatus').html('<span class="text-danger">请选择文件</span>'); return; }
+        // ============ 工具函数 ============
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3500);
+        }
 
-            var formData = new FormData();
-            formData.append('file', file);
+        function setStatus(text) {
+            document.getElementById('statusText').textContent = text;
+        }
 
-            $.ajax({
-                url: '/upload', type: 'POST', data: formData,
-                processData: false, contentType: false,
-                success: function (res) {
-                    if (res.code === 200) {
-                        $('#uploadStatus').html('<span class="text-success">上传成功</span>');
-                        renderPreview(res.data);
-                        populateSelects(res.data.columns);
-                        $('#xAxis, #yAxis, #drawBtn, #exportBtn').prop('disabled', false);
-                    } else {
-                        $('#uploadStatus').html('<span class="text-danger">' + res.msg + '</span>');
-                    }
-                }
-            });
-        });
+        function updateFlow(step) {
+            const steps = document.querySelectorAll('.flow-step');
+            steps.forEach(s => s.className = 'flow-step');
+            const map = { 1: 'step1', 2: 'step2', 3: 'step3', 4: 'step4' };
+            for (let i = 1; i <= 4; i++) {
+                const el = document.getElementById(map[i]);
+                if (i < step) el.classList.add('done');
+                if (i === step) el.classList.add('active');
+            }
+        }
 
-        // 渲染预览表格
-        function renderPreview(data) {
-            var html = '<table class="table table-striped"><thead><tr>';
-            data.columns.forEach(col => html += '<th>' + col + '</th>');
+        function renderTable(wrapperId, columns, rows) {
+            const wrapper = document.getElementById(wrapperId);
+            if (!rows.length) {
+                wrapper.innerHTML = '<p style="padding:16px;color:var(--text-secondary);">暂无数据</p>';
+                return;
+            }
+            let html = '<table><thead><tr>';
+            columns.forEach(c => { html += `<th>${c}</th>`; });
             html += '</tr></thead><tbody>';
-            data.rows.forEach(row => {
+            rows.forEach(row => {
                 html += '<tr>';
-                row.forEach(cell => html += '<td>' + (cell || '') + '</td>');
+                row.forEach(cell => { html += `<td>${cell}</td>`; });
                 html += '</tr>';
             });
             html += '</tbody></table>';
-            $('#dataPreview').html(html);
+            wrapper.innerHTML = html;
         }
 
-        // 填充下拉菜单
-        function populateSelects(cols) {
-            var opts = '<option value="">请选择</option>';
-            cols.forEach(col => opts += '<option value="' + col + '">' + col + '</option>');
-            $('#xAxis, #yAxis').html(opts);
+        function enableButtons(ids) {
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = false;
+            });
         }
 
-        // 绘制图表
-        $('#drawBtn').click(function () {
-            var x = $('#xAxis').val(), y = $('#yAxis').val();
-            if (!x || !y) { alert('请选择字段'); return; }
+        function populateColumnSelects(columns) {
+            const selects = ['xCol', 'yCol'];
+            selects.forEach(sid => {
+                const sel = document.getElementById(sid);
+                sel.innerHTML = columns.map(c => `<option value="${c}">${c}</option>`).join('');
+            });
+        }
 
-            // 获取图表数据
-            $.ajax({
-                url: '/get_data', type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ x_col: x, y_col: y }),
-                success: function (res) {
-                    var option = {
-                        title: { text: x + ' vs ' + y },
-                        tooltip: { trigger: 'axis' },
-                        xAxis: { type: 'category', data: res.data.x_values },
-                        yAxis: { type: 'value' },
-                        series: [{ type: $('#chartType').val(), data: res.data.y_values }]
+        // ============ 上传文件（任务A接口） ============
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                showToast('请先选择文件', 'error');
+                return;
+            }
+
+            setStatus('上传中...');
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const json = await res.json();
+                if (json.code !== 200) {
+                    showToast(json.msg || '上传失败', 'error');
+                    setStatus('就绪');
+                    return;
+                }
+
+                currentColumns = json.data.columns;
+                currentShape = json.data.shape;
+
+                // 显示统计
+                document.getElementById('uploadStats').style.display = 'flex';
+                document.getElementById('uploadStats').innerHTML = `
+                    <span class="stat-item">行数: <strong>${json.data.shape[0]}</strong></span>
+                    <span class="stat-item">列数: <strong>${json.data.shape[1]}</strong></span>
+                    <span class="stat-item">列名: <strong>${json.data.columns.join(', ')}</strong></span>
+                `;
+
+                // 渲染预览
+                document.getElementById('previewSection').style.display = 'block';
+                renderTable('previewTable', json.data.columns, json.data.rows);
+
+                // 填充下拉框
+                populateColumnSelects(json.data.columns);
+
+                // 启用下游按钮
+                enableButtons(['btnClean', 'btnExport']);
+                updateFlow(1);
+                showToast('✅ 上传成功！数据 ' + json.data.shape[0] + ' 行 × ' + json.data.shape[1] + ' 列', 'success');
+                setStatus('数据已加载');
+
+                // 初始化图表
+                initChart();
+                updateChart();
+            } catch (err) {
+                showToast('上传失败：' + err.message, 'error');
+                setStatus('就绪');
+            }
+        }
+
+        // ============ 数据清洗（任务B接口） ============
+        async function cleanData() {
+            const method = document.getElementById('cleanMethod').value;
+            setStatus('清洗中...');
+            document.getElementById('btnClean').disabled = true;
+
+            try {
+                const res = await fetch('/clean', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ method: method, columns: currentColumns })
+                });
+                const json = await res.json();
+                if (json.code !== 200) {
+                    showToast(json.msg || '清洗失败', 'error');
+                    setStatus('就绪');
+                    document.getElementById('btnClean').disabled = false;
+                    return;
+                }
+
+                currentColumns = json.data.columns;
+                currentShape = json.data.shape;
+
+                // 显示清洗结果
+                document.getElementById('cleanPreview').style.display = 'block';
+                document.getElementById('cleanStats').innerHTML = `
+                    <span class="stat-item">清洗后: <strong>${json.data.shape[0]}</strong> 行 × <strong>${json.data.shape[1]}</strong> 列</span>
+                    <span class="stat-item">剩余缺失值: <strong>${json.data.null_count}</strong></span>
+                `;
+                document.getElementById('cleanMsg').textContent = json.msg;
+                renderTable('cleanTable', json.data.columns, json.data.rows);
+
+                // 更新下拉框
+                populateColumnSelects(json.data.columns);
+
+                updateFlow(2);
+                showToast('✅ ' + json.msg, 'success');
+                setStatus('清洗完成');
+                updateChart();
+            } catch (err) {
+                showToast('清洗失败：' + err.message, 'error');
+                setStatus('就绪');
+            } finally {
+                document.getElementById('btnClean').disabled = false;
+            }
+        }
+
+        // ============ 可视化（任务C接口 - ECharts + 回归分析） ============
+        function initChart() {
+            const dom = document.getElementById('mainChart');
+            if (chartInstance) chartInstance.dispose();
+            chartInstance = echarts.init(dom);
+            window.addEventListener('resize', () => chartInstance && chartInstance.resize());
+        }
+
+        function updateChart() {
+            if (!chartInstance || !currentColumns.length) return;
+
+            const xCol = document.getElementById('xCol').value;
+            const yCol = document.getElementById('yCol').value;
+            const chartType = document.getElementById('chartType').value;
+            const hint = document.getElementById('chartHint');
+
+            if (!xCol || !yCol) return;
+
+            // 1. 获取原始数据用于绘图
+            fetch('/get_data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x_col: xCol, y_col: yCol })
+                })
+                .then(r => r.json())
+                .then(json => {
+                    if (json.code !== 200) return;
+                    const { x_values, y_values } = json.data;
+                    const dataPoints = x_values.map((x, i) =>
+                        chartType === 'scatter' ? [x, y_values[i]] : y_values[i]
+                    );
+
+                    const option = {
+                        tooltip: { trigger: chartType === 'scatter' ? 'item' : 'axis' },
+                        legend: { data: [yCol], bottom: 0 },
+                        grid: { left: '3%', right: '4%', bottom: '12%', containLabel: true },
+                        xAxis: {
+                            type: chartType === 'scatter' ? 'value' : 'category',
+                            name: xCol,
+                            data: chartType !== 'scatter' ? x_values.map(String) : null,
+                            nameLocation: 'center',
+                            nameGap: 30
+                        },
+                        yAxis: { type: 'value', name: yCol },
+                        series: [{
+                            name: yCol,
+                            type: chartType,
+                            data: dataPoints,
+                            smooth: chartType === 'line',
+                            itemStyle: { color: '#4f6ef7' },
+                            lineStyle: { color: '#4f6ef7', width: 2 },
+                        }]
                     };
-                    chart.setOption(option);
+
+                    if (chartType !== 'scatter' && dataPoints.length > 50) {
+                        option.dataZoom = [{ type: 'slider', start: 0, end: 20 }];
+                    }
+
+                    chartInstance.setOption(option, true);
+                })
+                .catch(() => {
+                    hint.textContent = '请确保已上传包含数值列的数据';
+                });
+
+            // 2. 获取回归分析结果
+            fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x_col: xCol, y_col: yCol })
+                })
+                .then(r => r.json())
+                .then(json => {
+                    if (json.code === 200) {
+                        hint.textContent = `R² = ${json.data.r2_score} | 斜率 = ${json.data.slope} | 截距 = ${json.data.intercept}`;
+                    }
+                })
+                .catch(() => {});
+
+            updateFlow(3);
+        }
+
+        // ============ 导出 CSV（任务D核心功能） ============
+        async function exportCSV() {
+            if (!currentColumns.length) {
+                showToast('没有可导出的数据，请先上传数据', 'error');
+                return;
+            }
+
+            setStatus('导出中...');
+            document.getElementById('btnExport').disabled = true;
+
+            try {
+                const res = await fetch('/export');
+                if (!res.ok) {
+                    const json = await res.json();
+                    showToast(json.msg || '导出失败', 'error');
+                    setStatus('就绪');
+                    document.getElementById('btnExport').disabled = false;
+                    return;
+                }
+
+                // 下载文件
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'cleaned_data.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                updateFlow(4);
+                document.getElementById('exportMsg').textContent =
+                    `✅ 导出成功！${currentShape[0]} 行 × ${currentShape[1]} 列`;
+                showToast('✅ CSV 文件已下载', 'success');
+                setStatus('导出完成');
+            } catch (err) {
+                showToast('导出失败：' + err.message, 'error');
+                setStatus('就绪');
+            } finally {
+                document.getElementById('btnExport').disabled = false;
+            }
+        }
+
+        // ============ 重置 ============
+        function resetAll() {
+            currentColumns = [];
+            currentShape = [0, 0];
+            document.getElementById('fileInput').value = '';
+            document.getElementById('previewSection').style.display = 'none';
+            document.getElementById('uploadStats').style.display = 'none';
+            document.getElementById('cleanPreview').style.display = 'none';
+            document.getElementById('cleanMsg').textContent = '';
+            document.getElementById('exportMsg').textContent = '';
+            document.getElementById('chartHint').textContent = '请先上传数据，然后选择 X/Y 轴字段';
+            document.getElementById('btnClean').disabled = true;
+            document.getElementById('btnExport').disabled = true;
+            document.getElementById('xCol').innerHTML = '';
+            document.getElementById('yCol').innerHTML = '';
+
+            if (chartInstance) {
+                chartInstance.clear();
+            }
+
+            const steps = document.querySelectorAll('.flow-step');
+            steps.forEach(s => s.className = 'flow-step');
+
+            setStatus('就绪');
+            showToast('已重置全部状态', 'info');
+        }
+
+        // ============ 页面初始化 ============
+        document.addEventListener('DOMContentLoaded', () => {
+            // 文件选择后自动显示文件名
+            document.getElementById('fileInput').addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    setStatus(`已选择: ${this.files[0].name}`);
                 }
             });
 
-            // 获取分析结果
-            $.ajax({
-                url: '/analyze', type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ x_col: x, y_col: y }),
-                success: function (res) {
-                    var html = '<div class="row"><div class="col-md-4"><div class="card bg-light text-center"><p>R²分数</p><p class="h3">' + res.data.r2_score + '</p></div></div>';
-                    html += '<div class="col-md-4"><div class="card bg-light text-center"><p>斜率</p><p class="h3">' + res.data.slope + '</p></div></div>';
-                    html += '<div class="col-md-4"><div class="card bg-light text-center"><p>截距</p><p class="h3">' + res.data.intercept + '</p></div></div></div>';
-                    $('#analysisResult').html(html);
-                }
+            // 响应式图表重绘
+            window.addEventListener('resize', () => {
+                if (chartInstance) chartInstance.resize();
             });
         });
-
-        // 图表类型切换
-        $('#chartType').change(function () { if ($('#xAxis').val()) $('#drawBtn').click(); });
-        window.addEventListener('resize', () => chart.resize());
     </script>
 </body>
-
 </html>
