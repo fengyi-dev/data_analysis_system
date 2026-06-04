@@ -181,19 +181,21 @@ def upload():
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'读取文件失败：{str(e)}'})
 
-# 分析接口（线性回归）
+# 分析接口
 @app.route('/analyze', methods=['POST'])
 def analyze():
     global current_df
     if current_df is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
+        return jsonify({'code': 400, 'msg': '请先上传数据'})
 
     data = request.json
     x_col = data.get('x_col')
     y_col = data.get('y_col')
+    do_cluster = data.get('do_cluster', True)  # 是否做聚类
+    n_clusters = data.get('n_clusters', 3)
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
+        return jsonify({'code': 400, 'msg': '所选列不存在'})
 
     try:
         df = current_df[[x_col, y_col]].dropna()
@@ -201,23 +203,43 @@ def analyze():
         y = df[y_col].values
 
         if len(X) < 2:
-            return jsonify({'code': 400, 'msg': '有效数据点不足'}), 400
+            return jsonify({'code': 400, 'msg': '有效数据点不足'})
 
+        # ========== 1. 线性回归 ==========
         model = LinearRegression()
         model.fit(X, y)
         predictions = model.predict(X)
 
-        return jsonify({
-            'code': 200,
-            'data': {
+        result = {
+            'regression': {
                 'r2_score': round(model.score(X, y), 4),
                 'slope': round(model.coef_[0], 4),
                 'intercept': round(model.intercept_, 4),
                 'predictions': predictions.tolist()
             }
-        })
+        }
+
+        # ========== 2. K-Means 聚类 ==========
+        if do_cluster:
+            from sklearn.cluster import KMeans
+            X_cluster = df[[x_col, y_col]].values
+            if len(X_cluster) >= n_clusters:
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                labels = kmeans.fit_predict(X_cluster)
+                result['cluster'] = {
+                    'labels': labels.tolist(),
+                    'centers': kmeans.cluster_centers_.tolist(),
+                    'n_clusters': n_clusters,
+                    'x_values': df[x_col].values.tolist(),
+                    'y_values': df[y_col].values.tolist()
+                }
+            else:
+                result['cluster'] = {'error': f'数据点不足，至少需要{n_clusters}行'}
+
+        return jsonify({'code': 200, 'data': result})
+
     except Exception as e:
-        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'}), 400
+        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'})
 
 # 清洗接口
 @app.route('/clean', methods=['POST'])

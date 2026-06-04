@@ -3,107 +3,226 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>数据分析-线性回归</title>
+    <title>数据分析 - 聚类 + 回归</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
+    <style>
+        .chart-container { height: 380px; width: 100%; }
+    </style>
 </head>
 
 <body class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>线性回归分析（R²、斜率、截距）</h3>
-        <div class="d-flex gap-2">
-            <a href="/view.html" class="btn btn-outline-info btn-sm">📈 跳转可视化</a>
-            <a href="/" class="btn btn-outline-secondary btn-sm">&larr; 返回首页</a>
+        <h3>📊 数据分析：聚类 + 回归预测</h3>
+        <a href="/" class="btn btn-outline-secondary btn-sm">&larr; 返回首页</a>
+    </div>
+
+    <!-- 参数选择 -->
+    <div class="card p-3 mb-3">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label>X 轴字段</label>
+                <select id="xCol" class="form-select"></select>
+            </div>
+            <div class="col-md-3">
+                <label>Y 轴字段</label>
+                <select id="yCol" class="form-select"></select>
+            </div>
+            <div class="col-md-2">
+                <label>聚类数 (K)</label>
+                <select id="kValue" class="form-select">
+                    <option value="2">2 类</option>
+                    <option value="3" selected>3 类</option>
+                    <option value="4">4 类</option>
+                    <option value="5">5 类</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button id="analyzeBtn" class="btn btn-primary w-100">🚀 开始分析（聚类 + 回归）</button>
+            </div>
         </div>
     </div>
-    <div class="row mb-3">
-        <div class="col-md-4">
-            <label>X自变量</label>
-            <select id="ax" class="form-select"></select>
-        </div>
-        <div class="col-md-4">
-            <label>Y因变量</label>
-            <select id="ay" class="form-select"></select>
-        </div>
-        <div class="col-md-4 mt-4">
-            <button id="anaBtn" class="btn btn-warning">开始分析</button>
+
+    <!-- 聚类散点图 -->
+    <div class="card mb-3">
+        <div class="card-header">🔍 K-Means 聚类结果</div>
+        <div class="card-body">
+            <div id="clusterChart" class="chart-container"></div>
         </div>
     </div>
+
     <div class="row">
+        <!-- 回归结果卡片 -->
         <div class="col-md-4">
-            <div class="card p-3 text-center">
-                <h5>R²系数</h5>
-                <p id="r2"></p>
+            <div class="card h-100">
+                <div class="card-header">📐 线性回归结果</div>
+                <div class="card-body" id="regressResult">
+                    <p class="text-muted">点击"开始分析"查看结果</p>
+                </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card p-3 text-center">
-                <h5>斜率</h5>
-                <p id="slope"></p>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card p-3 text-center">
-                <h5>截距</h5>
-                <p id="inter"></p>
+        <!-- 回归线图 -->
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header">📈 回归线（实际值 vs 预测值）</div>
+                <div class="card-body">
+                    <div id="regressChart" class="chart-container"></div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        //填充下拉
-        let cols = JSON.parse(localStorage.getItem('cols') || '[]');
-        let savedX = localStorage.getItem('selectedX') || '';
-        let savedY = localStorage.getItem('selectedY') || '';
-        cols.forEach(c => {
-            let selX = (c === savedX) ? ' selected' : '';
-            let selY = (c === savedY) ? ' selected' : '';
-            $('#ax').append(`<option${selX}>${c}</option>`);
-            $('#ay').append(`<option${selY}>${c}</option>`);
-        })
-        // 如果有保存的字段，自动触发分析
-        if (savedX && savedY) {
-            $('#ax').val(savedX);
-            $('#ay').val(savedY);
-        }
-        function showAnaError(msg) {
-            $('#anaBtn').after('<div class="alert alert-warning mt-2" id="anaErr">' + msg + '</div>');
-            setTimeout(function() { $('#anaErr').remove(); }, 5000);
+        let clusterChart = null;
+        let regressChart = null;
+
+        $(document).ready(function() {
+            clusterChart = echarts.init(document.getElementById('clusterChart'));
+            regressChart = echarts.init(document.getElementById('regressChart'));
+            loadColumns();
+        });
+
+        function loadColumns() {
+            let cols = JSON.parse(localStorage.getItem('cols') || '[]');
+            let savedX = localStorage.getItem('selectedX') || '';
+            let savedY = localStorage.getItem('selectedY') || '';
+            cols.forEach(c => {
+                let selX = (c === savedX) ? ' selected' : '';
+                let selY = (c === savedY) ? ' selected' : '';
+                $('#xCol').append(`<option${selX}>${c}</option>`);
+                $('#yCol').append(`<option${selY}>${c}</option>`);
+            });
+            if (savedX && savedY) {
+                $('#xCol').val(savedX);
+                $('#yCol').val(savedY);
+            }
         }
 
-        //分析请求
-        $('#anaBtn').click(function () {
-            let x = $('#ax').val(), y = $('#ay').val();
-            if (!x || !y) { alert('请选择字段'); return; }
-            // 同步保存选中字段
-            localStorage.setItem('selectedX', x);
-            localStorage.setItem('selectedY', y);
-            $('#anaErr').remove();
+        $('#analyzeBtn').click(function() {
+            let x = $('#xCol').val();
+            let y = $('#yCol').val();
+            let k = $('#kValue').val();
+            if (!x || !y) { alert('请选择 X 和 Y 字段'); return; }
+
+            $('#analyzeBtn').text('分析中...').prop('disabled', true);
             $.ajax({
-                url: '/analyze', type: 'POST', contentType: 'application/json',
-                data: JSON.stringify({ x_col: x, y_col: y }),
-                success(res) {
-                    if (res.code !== 200) {
-                        showAnaError('⚠ ' + (res.msg || '分析失败'));
-                        return;
+                url: '/analyze',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ 
+                    x_col: x, 
+                    y_col: y, 
+                    do_cluster: true, 
+                    n_clusters: parseInt(k) 
+                }),
+                success: function(res) {
+                    if (res.code === 200) {
+                        let data = res.data;
+                        if (data.cluster) drawClusterChart(data.cluster);
+                        if (data.regression) {
+                            displayRegression(data.regression);
+                            drawRegressChart(data.regression, x, y);
+                        }
+                    } else {
+                        alert('分析失败：' + res.msg);
                     }
-                    $('#r2').text(res.data.r2_score);
-                    $('#slope').text(res.data.slope);
-                    $('#inter').text(res.data.intercept);
                 },
-                error: function (xhr) {
-                    try {
-                        var err = JSON.parse(xhr.responseText);
-                        showAnaError('⚠ ' + (err.msg || '请求失败，请确认已上传数据'));
-                    } catch(e) {
-                        showAnaError('⚠ 请求失败，请确认已上传数据后刷新页面');
+                error: function() { alert('请求失败，请检查后端'); },
+                complete: function() { $('#analyzeBtn').text('🚀 开始分析（聚类 + 回归）').prop('disabled', false); }
+            });
+        });
+
+        function drawClusterChart(data) {
+            if (data.error) {
+                $('#clusterChart').parent().html('<div class="alert alert-warning">' + data.error + '</div>');
+                return;
+            }
+            let seriesData = [];
+            let colors = ['#5470c6', '#fac858', '#ee6666', '#73c0de', '#3ba272'];
+            for (let i = 0; i < data.n_clusters; i++) {
+                let points = [];
+                for (let j = 0; j < data.labels.length; j++) {
+                    if (data.labels[j] === i) {
+                        points.push([data.x_values[j], data.y_values[j]]);
                     }
                 }
-            })
-        })
-        // 如果有预设字段，自动分析一次
-        if (savedX && savedY) {
-            setTimeout(function() { $('#anaBtn').click(); }, 300);
+                seriesData.push({
+                    name: '类别 ' + (i + 1),
+                    type: 'scatter',
+                    data: points,
+                    itemStyle: { color: colors[i % colors.length] }
+                });
+            }
+            // 聚类中心
+            let centers = data.centers.map(c => [c[0], c[1]]);
+            seriesData.push({
+                name: '聚类中心',
+                type: 'scatter',
+                data: centers,
+                symbol: 'diamond',
+                symbolSize: 14,
+                itemStyle: { color: '#000', borderColor: '#fff', borderWidth: 2 }
+            });
+
+            clusterChart.setOption({
+                title: { text: 'K-Means 聚类 (K=' + data.n_clusters + ')' },
+                tooltip: { trigger: 'axis' },
+                xAxis: { name: $('#xCol').val() },
+                yAxis: { name: $('#yCol').val() },
+                series: seriesData
+            });
+        }
+
+        function displayRegression(data) {
+            let html = `
+                <div class="alert alert-success p-2 text-center">
+                    <h5>R² 分数</h5>
+                    <h3>${data.r2_score}</h3>
+                    <small>越接近 1 拟合越好</small>
+                </div>
+                <hr>
+                <p><strong>📐 斜率:</strong> ${data.slope}</p>
+                <p><strong>📍 截距:</strong> ${data.intercept}</p>
+                <p><strong>📈 方程:</strong> y = ${data.slope} x + ${data.intercept}</p>
+            `;
+            $('#regressResult').html(html);
+        }
+
+        function drawRegressChart(regData, xName, yName) {
+            // 需要实际 x 值，重新请求 /get_data
+            $.ajax({
+                url: '/get_data',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ x_col: xName, y_col: yName }),
+                success: function(res) {
+                    if (res.code === 200) {
+                        let xData = res.data.x_values;
+                        let yData = res.data.y_values;
+                        regressChart.setOption({
+                            title: { text: '回归效果' },
+                            tooltip: { trigger: 'axis' },
+                            xAxis: { name: xName },
+                            yAxis: { name: yName },
+                            series: [
+                                {
+                                    name: '实际值',
+                                    type: 'scatter',
+                                    data: xData.map((x, i) => [x, yData[i]]),
+                                    itemStyle: { color: '#5470c6' }
+                                },
+                                {
+                                    name: '回归线',
+                                    type: 'line',
+                                    data: xData.map((x, i) => [x, regData.predictions[i]]),
+                                    lineStyle: { color: '#ee6666', width: 2 }
+                                }
+                            ]
+                        });
+                    }
+                }
+            });
         }
     </script>
 </body>
