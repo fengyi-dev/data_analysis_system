@@ -31,15 +31,28 @@
     <script>
         $('#cleanBtn').click(function () {
             let type = $('#cleanType').val();
+            $('#cleanErr').remove();
             $.ajax({
                 url: '/clean', type: 'POST', contentType: 'application/json',
                 data: JSON.stringify({ method: type }),
                 success(res) {
-                    $('#cleanTip').html('<span class="text-success">清洗完成</span>');
+                    if (res.code !== 200) {
+                        $('#cleanTip').html('<span class="text-warning">⚠ ' + (res.msg || '清洗失败') + '</span>');
+                        return;
+                    }
+                    $('#cleanTip').html('<span class="text-success">✅ 清洗完成 — ' + res.data.shape[0] + ' 行 × ' + res.data.shape[1] + ' 列</span>');
                     let html = '<table class="table">';
                     res.data.columns.forEach(c => html += `<th>${c}</th>`);
                     res.data.rows.forEach(r => { html += '<tr>'; r.forEach(d => html += `<td>${d}</td>`); html += '</tr>' })
                     $('#cleanResult').html(html);
+                },
+                error: function (xhr) {
+                    try {
+                        var err = JSON.parse(xhr.responseText);
+                        $('#cleanTip').html('<span class="text-warning">⚠ ' + (err.msg || '请求失败') + '</span>');
+                    } catch(e) {
+                        $('#cleanTip').html('<span class="text-warning">⚠ 请求失败，请确认已上传数据后刷新页面</span>');
+                    }
                 }
             })
         })

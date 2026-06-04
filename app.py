@@ -185,14 +185,14 @@ def upload():
 def analyze():
     global current_df
     if current_df is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'})
+        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     data = request.json
     x_col = data.get('x_col')
     y_col = data.get('y_col')
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'})
+        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
 
     try:
         df = current_df[[x_col, y_col]].dropna()
@@ -200,7 +200,7 @@ def analyze():
         y = df[y_col].values
 
         if len(X) < 2:
-            return jsonify({'code': 400, 'msg': '有效数据点不足'})
+            return jsonify({'code': 400, 'msg': '有效数据点不足'}), 400
 
         model = LinearRegression()
         model.fit(X, y)
@@ -216,14 +216,14 @@ def analyze():
             }
         })
     except Exception as e:
-        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'})
+        return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'}), 400
 
 # 清洗接口
 @app.route('/clean', methods=['POST'])
 def clean():
     global current_df
     if current_df is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'})
+        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     data = request.json
     method = data.get('method', 'drop')  # drop / fill_mean / fill_median
@@ -260,14 +260,14 @@ def clean():
 def get_data():
     global current_df
     if current_df is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'})
+        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     data = request.json
     x_col = data.get('x_col')
     y_col = data.get('y_col')
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'})
+        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
 
     df = current_df[[x_col, y_col]].dropna()
     return jsonify({

@@ -66,19 +66,38 @@
             $('#ax').val(savedX);
             $('#ay').val(savedY);
         }
+        function showAnaError(msg) {
+            $('#anaBtn').after('<div class="alert alert-warning mt-2" id="anaErr">' + msg + '</div>');
+            setTimeout(function() { $('#anaErr').remove(); }, 5000);
+        }
+
         //分析请求
         $('#anaBtn').click(function () {
             let x = $('#ax').val(), y = $('#ay').val();
+            if (!x || !y) { alert('请选择字段'); return; }
             // 同步保存选中字段
             localStorage.setItem('selectedX', x);
             localStorage.setItem('selectedY', y);
+            $('#anaErr').remove();
             $.ajax({
                 url: '/analyze', type: 'POST', contentType: 'application/json',
                 data: JSON.stringify({ x_col: x, y_col: y }),
                 success(res) {
+                    if (res.code !== 200) {
+                        showAnaError('⚠ ' + (res.msg || '分析失败'));
+                        return;
+                    }
                     $('#r2').text(res.data.r2_score);
                     $('#slope').text(res.data.slope);
                     $('#inter').text(res.data.intercept);
+                },
+                error: function (xhr) {
+                    try {
+                        var err = JSON.parse(xhr.responseText);
+                        showAnaError('⚠ ' + (err.msg || '请求失败，请确认已上传数据'));
+                    } catch(e) {
+                        showAnaError('⚠ 请求失败，请确认已上传数据后刷新页面');
+                    }
                 }
             })
         })

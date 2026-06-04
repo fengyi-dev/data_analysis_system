@@ -49,6 +49,12 @@
     <script>
         //初始化画布
         var chart = echarts.init(document.getElementById('chart'));
+
+        function showViewError(msg) {
+            $('#chart').after('<div class="alert alert-warning mt-2" id="viewErr">' + msg + '</div>');
+            setTimeout(function() { $('#viewErr').remove(); }, 5000);
+        }
+
         //绘图按钮
         $('#drawBtn').click(function () {
             var x = $('#xAxis').val(), y = $('#yAxis').val();
@@ -56,12 +62,17 @@
             // 保存选中字段到 localStorage，供 analyze 页面使用
             localStorage.setItem('selectedX', x);
             localStorage.setItem('selectedY', y);
+            $('#viewErr').remove();
             $.ajax({
                 url: '/get_data',
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify({ x_col: x, y_col: y }),
                 success: function (res) {
+                    if (res.code !== 200) {
+                        showViewError('⚠ ' + (res.msg || '获取数据失败'));
+                        return;
+                    }
                     let option = {
                         title: { text: x + " vs " + y },
                         xAxis: { type: 'category', data: res.data.x_values },
@@ -69,6 +80,14 @@
                         series: [{ type: $('#chartType').val(), data: res.data.y_values }]
                     }
                     chart.setOption(option);
+                },
+                error: function (xhr) {
+                    try {
+                        var err = JSON.parse(xhr.responseText);
+                        showViewError('⚠ ' + (err.msg || '请求失败，请确认已上传数据'));
+                    } catch(e) {
+                        showViewError('⚠ 请求失败，请确认已上传数据后刷新页面');
+                    }
                 }
             })
         });
