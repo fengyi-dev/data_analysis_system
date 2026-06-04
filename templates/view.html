@@ -41,10 +41,19 @@
             <select id="yAxis" class="form-select"></select>
         </div>
         <div class="col-md-3 mt-4">
-            <button id="drawBtn" class="btn btn-success">绘制图表</button>
+            <div class="d-flex gap-2">
+                <input id="maxPoints" type="number" class="form-control form-control-sm" value="2000" min="100"
+                    max="20000" style="width:120px;" title="最大点数">
+                <div class="form-check form-check-inline mt-1">
+                    <input class="form-check-input" type="checkbox" id="forceFull">
+                    <label class="form-check-label" for="forceFull">显示全部点</label>
+                </div>
+                <button id="drawBtn" class="btn btn-success">绘制图表</button>
+            </div>
         </div>
     </div>
     <div id="chart" class="chart-container border"></div>
+    <div id="vizInfo" class="mt-2 small text-muted"></div>
 
     <script>
         //初始化画布
@@ -52,7 +61,7 @@
 
         function showViewError(msg) {
             $('#chart').after('<div class="alert alert-warning mt-2" id="viewErr">' + msg + '</div>');
-            setTimeout(function() { $('#viewErr').remove(); }, 5000);
+            setTimeout(function () { $('#viewErr').remove(); }, 5000);
         }
 
         //绘图按钮
@@ -67,17 +76,23 @@
                 url: '/get_data',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ x_col: x, y_col: y }),
+                data: JSON.stringify({ x_col: x, y_col: y, chart_type: $('#chartType').val(), max_points: parseInt($('#maxPoints').val() || 2000), force_full: $('#forceFull').is(':checked') }),
                 success: function (res) {
                     if (res.code !== 200) {
                         showViewError('⚠ ' + (res.msg || '获取数据失败'));
                         return;
                     }
+                    let meta = res.data.meta || {};
                     let option = {
                         title: { text: x + " vs " + y },
                         xAxis: { type: 'category', data: res.data.x_values },
                         yAxis: { type: 'value' },
                         series: [{ type: $('#chartType').val(), data: res.data.y_values }]
+                    }
+                    if (meta.downsampled) {
+                        $('#vizInfo').text('数据量大（' + meta.original_points + '），已下采样为 ' + meta.returned_points + ' 点。可提高 最大点数 或勾选“显示全部点”。');
+                    } else {
+                        $('#vizInfo').text('数据点：' + meta.returned_points + (meta.original_points && meta.original_points !== meta.returned_points ? ('（原始 ' + meta.original_points + '）') : ''));
                     }
                     chart.setOption(option);
                 },
@@ -85,7 +100,7 @@
                     try {
                         var err = JSON.parse(xhr.responseText);
                         showViewError('⚠ ' + (err.msg || '请求失败，请确认已上传数据'));
-                    } catch(e) {
+                    } catch (e) {
                         showViewError('⚠ 请求失败，请确认已上传数据后刷新页面');
                     }
                 }
@@ -111,7 +126,7 @@
         if (savedX && savedY) {
             $('#xAxis').val(savedX);
             $('#yAxis').val(savedY);
-            setTimeout(function() { $('#drawBtn').click(); }, 300);
+            setTimeout(function () { $('#drawBtn').click(); }, 300);
         }
     </script>
 </body>

@@ -14,6 +14,14 @@ app = Flask(__name__)
 # 配置文件上传限制：最大 100MB
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
+# 同步当前数据到 app.config（供 blueprint 使用）
+app.config['CURRENT_DF'] = None
+app.config['CURRENT_FILENAME'] = None
+
+# 注册可视化 blueprint（在 viz.py 中实现）
+from viz import viz_bp
+app.register_blueprint(viz_bp)
+
 # 全局变量存储当前数据
 current_df = None
 current_filename = None
@@ -164,6 +172,10 @@ def upload():
         if current_df.empty:
             return jsonify({'code': 400, 'msg': '文件为空，请检查数据'})
 
+        # 同步到 app.config 供可视化 blueprint 使用
+        app.config['CURRENT_DF'] = current_df
+        app.config['CURRENT_FILENAME'] = current_filename
+
         preview = safe_json_serialize(current_df)
         preview['filename'] = filename
 
@@ -267,6 +279,9 @@ def clean():
 
     current_df = df
 
+    # 同步到 app.config
+    app.config['CURRENT_DF'] = current_df
+
     return jsonify({
         'code': 200,
         'data': {
@@ -311,6 +326,9 @@ def auto_clean():
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'清洗出错: {str(e)}'}), 500
 
+    # 同步到 app.config
+    app.config['CURRENT_DF'] = current_df
+
     after_shape = current_df.shape
     details = '\n'.join(result['details']) if result['details'] else '无需处理'
 
@@ -331,28 +349,7 @@ def auto_clean():
     })
 
 
-# 获取数据接口（用于图表绑定）
-@app.route('/get_data', methods=['POST'])
-def get_data():
-    global current_df
-    if current_df is None:
-        return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
-
-    data = request.json
-    x_col = data.get('x_col')
-    y_col = data.get('y_col')
-
-    if x_col not in current_df.columns or y_col not in current_df.columns:
-        return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
-
-    df = current_df[[x_col, y_col]].dropna()
-    return jsonify({
-        'code': 200,
-        'data': {
-            'x_values': df[x_col].values.tolist(),
-            'y_values': df[y_col].values.tolist()
-        }
-    })
+# 获取数据接口已迁移到 viz.py（Blueprint）
 
 
 # 导出接口
@@ -393,9 +390,7 @@ def go_upload():
 def go_clean():
     return render_template("clean.html")
 
-@app.route('/view.html')
-def go_view():
-    return render_template("view.html")
+# `/view.html` 路由已迁移到 `viz.py` 中的 Blueprint（保留此处注释以便追踪）
 
 @app.route('/analyze.html')
 def go_analyze():
