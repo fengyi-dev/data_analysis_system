@@ -3,18 +3,83 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>数据分析系统首页</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式数据分析系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f1f5f9; min-height: 100vh; }
+        .hero { background: linear-gradient(135deg, #0f1d31 0%, #1e3a5f 40%, #4f6ef7 100%); color: #fff; padding: 56px 24px; text-align: center; border-radius: 0 0 28px 28px; margin-bottom: 36px; box-shadow: 0 4px 24px rgba(15,29,49,.2); }
+        .hero h1 { font-weight: 700; font-size: 2.1rem; margin-bottom: 10px; }
+        .hero p { font-size: 1rem; opacity: .82; margin: 0; }
+        .flow-container { max-width: 760px; margin: 0 auto; padding: 0 20px 48px; }
+        .flow-card { display: flex; align-items: center; gap: 16px; background: #fff; border-radius: 14px; padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.05); border: 1px solid #e2e8f0; text-decoration: none; color: inherit; transition: all .25s; margin-bottom: 8px; }
+        .flow-card:hover { border-color: #4f6ef7; box-shadow: 0 6px 18px rgba(79,110,247,.12); transform: translateY(-2px); color: inherit; }
+        .flow-card .num { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #1e3a5f, #4f6ef7); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.15rem; flex-shrink: 0; }
+        .flow-card .info { flex: 1; min-width: 0; }
+        .flow-card .info h5 { margin: 0 0 3px; font-weight: 600; font-size: 1rem; }
+        .flow-card .info p { margin: 0; font-size: .83rem; color: #64748b; }
+        .flow-arrow { text-align: center; color: #cbd5e1; font-size: 1.35rem; margin: 2px 0; padding: 0; line-height: 1; }
+        .btn-start { display: block; max-width: 320px; margin: 32px auto 0; padding: 15px 0; font-size: 1.1rem; font-weight: 700; background: linear-gradient(135deg, #4f6ef7, #7c5ce7); border: none; border-radius: 12px; color: #fff; text-align: center; text-decoration: none; transition: all .25s; box-shadow: 0 3px 12px rgba(79,110,247,.2); }
+        .btn-start:hover { box-shadow: 0 6px 22px rgba(79,110,247,.35); transform: translateY(-2px); color: #fff; }
+
+        @media (max-width: 640px) { .hero h1 { font-size: 1.5rem; } .flow-card { flex-wrap: wrap; } }
+    </style>
 </head>
 
-<body class="container mt-5">
-    <h2 class="text-center mb-5">交互式数据分析系统</h2>
-    <div class="d-grid gap-3 col-6 mx-auto">
-        <a href="upload.html" class="btn btn-primary btn-lg">1.数据管理（文件上传/预览/导出）</a>
-        <a href="clean.html" class="btn btn-success btn-lg">2.数据清洗（缺失值、异常处理）</a>
-        <a href="view.html" class="btn btn-info btn-lg">3.数据可视化（自定义参数+3种图表）</a>
-        <a href="analyze.html" class="btn btn-warning btn-lg">4.数据分析（回归算法）</a>
-    </div>
-</body>
+<body>
 
+<div class="hero">
+    <h1>📊 交互式数据分析系统</h1>
+    <p>上传 → 清洗 → 分析 → 可视化 → 导出，五步完成完整数据分析流程</p>
+</div>
+
+<div class="flow-container">
+    <a href="/upload.html" class="flow-card">
+        <span class="num">1</span>
+        <div class="info">
+            <h5>数据上传与预览</h5>
+            <p>拖拽上传 CSV / Excel，自动编码检测与分隔符识别，预览前 10 行</p>
+        </div>
+    </a>
+    <p class="flow-arrow">↓</p>
+
+    <a href="/clean.html" class="flow-card">
+        <span class="num">2</span>
+        <div class="info">
+            <h5>数据清洗</h5>
+            <p>IQR 异常值检测 + 缺失值分析，按列配置策略，一键自动清洗</p>
+        </div>
+    </a>
+    <p class="flow-arrow">↓</p>
+
+    <a href="/analyze.html" class="flow-card">
+        <span class="num">3</span>
+        <div class="info">
+            <h5>线性回归分析</h5>
+            <p>最小二乘法拟合，输出 R² 决定系数、斜率、截距及完整回归方程</p>
+        </div>
+    </a>
+    <p class="flow-arrow">↓</p>
+
+    <a href="/view.html" class="flow-card">
+        <span class="num">4</span>
+        <div class="info">
+            <h5>数据可视化</h5>
+            <p>ECharts 柱状图 / 折线图 / 散点图，大数据自动抽样，支持缩放</p>
+        </div>
+    </a>
+    <p class="flow-arrow">↓</p>
+
+    <div class="flow-card">
+        <span class="num">5</span>
+        <div class="info">
+            <h5>导出数据</h5>
+            <p>将清洗后数据导出为 UTF-8 CSV，可在 Excel / Python 中继续处理</p>
+        </div>
+    </div>
+
+    <a href="/upload.html" class="btn-start">🚀 开始数据分析</a>
+</div>
+
+</body>
 </html>
