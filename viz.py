@@ -8,10 +8,10 @@ viz_bp = Blueprint('viz', __name__)
 def _series_to_list(series):
     if pd.api.types.is_datetime64_any_dtype(series):
         return series.dt.strftime('%Y-%m-%d %H:%M:%S').tolist()
-    return [None if pd.isna(v) else v for v in series.tolist()]
+    return [None if pd.isna(value) else value for value in series.tolist()]
 
 
-def _detect_kind(series):
+def _guess_type(series):
     if pd.api.types.is_datetime64_any_dtype(series):
         return 'datetime'
     if pd.api.types.is_numeric_dtype(series):
@@ -23,20 +23,11 @@ def _detect_kind(series):
     return 'category'
 
 
-def _normalize(series, kind):
-    if kind == 'datetime':
-        return pd.to_datetime(series, errors='coerce')
-    if kind == 'numeric':
-        return pd.to_numeric(series, errors='coerce')
-    return series.astype(str)
-
-
-def _bin_values(values, max_bins):
-    if pd.api.types.is_datetime64_any_dtype(values) or pd.api.types.is_numeric_dtype(values):
-        values = values.dropna()
+def _bin_series(series, max_bins=30):
+    if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_datetime64_any_dtype(series):
+        values = pd.to_numeric(series, errors='coerce').dropna()
         if values.empty:
             return [], np.array([], dtype=int)
-
         if values.nunique() <= max_bins:
             labels = values.astype(str).unique().tolist()
             codes = pd.Categorical(values.astype(str), categories=labels).codes
@@ -47,60 +38,37 @@ def _bin_values(values, max_bins):
         codes = pd.cut(values, bins=edges, include_lowest=True, labels=False).astype(int).to_numpy()
         return labels, codes
 
-    values = values.astype(str)
+    values = series.astype(str)
     labels = values.value_counts().nlargest(max_bins).index.tolist()
-    label_map = {label: idx for idx, label in enumerate(labels)}
+    label_map = {label: index for index, label in enumerate(labels)}
     codes = values.map(label_map).fillna(-1).astype(int).to_numpy()
     return labels, codes
 
 
-def _build_heatmap_response(df, x_col, y_col, value_col=None, max_bins=30):
-    use_value = bool(value_col and value_col in df.columns)
-    columns = [x_col, y_col] + ([value_col] if use_value else [])
+def _build_heatmap_response(df, x_col, y_col, value_col=None):
+    columns = [x_col, y_col] + ([value_col] if value_col in df.columns else [])
     df = df[columns].dropna(subset=[x_col, y_col]).copy()
     if df.empty:
-        return {
-            'x_labels': [],
-            'y_labels': [],
-            'heatmap_data': [],
-            'min_value': 0,
-            'max_value': 0,
-            'value_label': value_col or 'count'
-        }
+        return {'x_labels': [], 'y_labels': [], 'heatmap_data': [], 'min_value': 0, 'max_value': 0, 'value_label': value_col or 'count'}
 
-    x_kind = _detect_kind(df[x_col])
-    y_kind = _detect_kind(df[y_col])
-    df['_x'] = _normalize(df[x_col], x_kind)
-    df['_y'] = _normalize(df[y_col], y_kind)
-
-    x_labels, x_codes = _bin_values(df['_x'], max_bins)
-    y_labels, y_codes = _bin_values(df['_y'], max_bins)
+    x_labels, x_codes = _bin_series(df[x_col])
+    y_labels, y_codes = _bin_series(df[y_col])
     if not x_labels or not y_labels:
-        return {
-            'x_labels': [],
-            'y_labels': [],
-            'heatmap_data': [],
-            'min_value': 0,
-            'max_value': 0,
-            'value_label': value_col or 'count'
-        }
+        return {'x_labels': [], 'y_labels': [], 'heatmap_data': [], 'min_value': 0, 'max_value': 0, 'value_label': value_col or 'count'}
 
-    df['_x_bin'] = x_codes
-    df['_y_bin'] = y_codes
-    df = df[(df['_x_bin'] >= 0) & (df['_y_bin'] >= 0)]
+    df['_x'] = x_codes
+    df['_y'] = y_codes
+    df = df[(df['_x'] >= 0) & (df['_y'] >= 0)]
 
-    if use_value:
-        agg = df.groupby(['_y_bin', '_x_bin'])[value_col].mean().unstack(fill_value=0)
+    if value_col in df.columns:
+        agg = df.groupby(['_y', '_x'])[value_col].mean().unstack(fill_value=0)
     else:
-        agg = df.groupby(['_y_bin', '_x_bin']).size().unstack(fill_value=0)
+        agg = df.groupby(['_y', '_x']).size().unstack(fill_value=0)
+
     agg = agg.reindex(index=range(len(y_labels)), columns=range(len(x_labels)), fill_value=0)
+    heatmap_data = [[x, y, float(agg.iat[y, x])] for y in range(len(y_labels)) for x in range(len(x_labels))]
+    values = [item[2] for item in heatmap_data] or [0]
 
-    heatmap_data = []
-    for yi in range(len(y_labels)):
-        for xi in range(len(x_labels)):
-            heatmap_data.append([xi, yi, float(agg.iat[yi, xi])])
-
-    values = [item[2] for item in heatmap_data] if heatmap_data else [0]
     return {
         'x_labels': x_labels,
         'y_labels': y_labels,
@@ -117,11 +85,11 @@ def get_data():
     if current_df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
-    data = request.json or {}
-    x_col = data.get('x_col')
-    y_col = data.get('y_col')
-    chart_type = (data.get('chart_type') or 'scatter').lower()
-    value_col = data.get('value_col')
+    params = request.json or {}
+    x_col = params.get('x_col')
+    y_col = params.get('y_col')
+    chart_type = (params.get('chart_type') or 'scatter').lower()
+    value_col = params.get('value_col')
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
         return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
@@ -130,18 +98,7 @@ def get_data():
         return jsonify({'code': 200, 'data': _build_heatmap_response(current_df, x_col, y_col, value_col)})
 
     df = current_df[[x_col, y_col]].dropna().copy()
-    if chart_type == 'line':
-        x_kind = _detect_kind(df[x_col])
-        if x_kind in ('numeric', 'datetime'):
-            df = df.assign(_x=_normalize(df[x_col], x_kind)).sort_values('_x')
-
-    return jsonify({
-        'code': 200,
-        'data': {
-            'x_values': _series_to_list(df[x_col]),
-            'y_values': _series_to_list(df[y_col])
-        }
-    })
+    return jsonify({'code': 200, 'data': {'x_values': _series_to_list(df[x_col]), 'y_values': _series_to_list(df[y_col])}})
 
 
 @viz_bp.route('/view.html')
