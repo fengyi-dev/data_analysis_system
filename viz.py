@@ -5,12 +5,110 @@ import numpy as np
 viz_bp = Blueprint('viz', __name__)
 
 
-def _series_to_list(s):
-    # datetime -> ISO string, numpy types -> python native
-    if pd.api.types.is_datetime64_any_dtype(s):
-        return s.dt.strftime('%Y-%m-%d %H:%M:%S').tolist()
-    return [None if (isinstance(v, float) and pd.isna(v)) else (v.tolist() if hasattr(v, 'tolist') else v)
-            for v in s]
+def _series_to_list(series):
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series.dt.strftime('%Y-%m-%d %H:%M:%S').tolist()
+    return [None if pd.isna(v) else v for v in series.tolist()]
+
+
+def _detect_kind(series):
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return 'datetime'
+    if pd.api.types.is_numeric_dtype(series):
+        return 'numeric'
+    if pd.to_datetime(series, errors='coerce').notna().any():
+        return 'datetime'
+    if pd.to_numeric(series, errors='coerce').notna().any():
+        return 'numeric'
+    return 'category'
+
+
+def _normalize(series, kind):
+    if kind == 'datetime':
+        return pd.to_datetime(series, errors='coerce')
+    if kind == 'numeric':
+        return pd.to_numeric(series, errors='coerce')
+    return series.astype(str)
+
+
+def _bin_values(values, max_bins):
+    if pd.api.types.is_datetime64_any_dtype(values) or pd.api.types.is_numeric_dtype(values):
+        values = values.dropna()
+        if values.empty:
+            return [], np.array([], dtype=int)
+
+        if values.nunique() <= max_bins:
+            labels = values.astype(str).unique().tolist()
+            codes = pd.Categorical(values.astype(str), categories=labels).codes
+            return labels, codes
+
+        edges = np.linspace(values.min(), values.max(), max_bins + 1)
+        labels = [str(round((edges[i] + edges[i + 1]) / 2, 3)) for i in range(max_bins)]
+        codes = pd.cut(values, bins=edges, include_lowest=True, labels=False).astype(int).to_numpy()
+        return labels, codes
+
+    values = values.astype(str)
+    labels = values.value_counts().nlargest(max_bins).index.tolist()
+    label_map = {label: idx for idx, label in enumerate(labels)}
+    codes = values.map(label_map).fillna(-1).astype(int).to_numpy()
+    return labels, codes
+
+
+def _build_heatmap_response(df, x_col, y_col, value_col=None, max_bins=30):
+    use_value = bool(value_col and value_col in df.columns)
+    columns = [x_col, y_col] + ([value_col] if use_value else [])
+    df = df[columns].dropna(subset=[x_col, y_col]).copy()
+    if df.empty:
+        return {
+            'x_labels': [],
+            'y_labels': [],
+            'heatmap_data': [],
+            'min_value': 0,
+            'max_value': 0,
+            'value_label': value_col or 'count'
+        }
+
+    x_kind = _detect_kind(df[x_col])
+    y_kind = _detect_kind(df[y_col])
+    df['_x'] = _normalize(df[x_col], x_kind)
+    df['_y'] = _normalize(df[y_col], y_kind)
+
+    x_labels, x_codes = _bin_values(df['_x'], max_bins)
+    y_labels, y_codes = _bin_values(df['_y'], max_bins)
+    if not x_labels or not y_labels:
+        return {
+            'x_labels': [],
+            'y_labels': [],
+            'heatmap_data': [],
+            'min_value': 0,
+            'max_value': 0,
+            'value_label': value_col or 'count'
+        }
+
+    df['_x_bin'] = x_codes
+    df['_y_bin'] = y_codes
+    df = df[(df['_x_bin'] >= 0) & (df['_y_bin'] >= 0)]
+
+    if use_value:
+        agg = df.groupby(['_y_bin', '_x_bin'])[value_col].mean().unstack(fill_value=0)
+    else:
+        agg = df.groupby(['_y_bin', '_x_bin']).size().unstack(fill_value=0)
+    agg = agg.reindex(index=range(len(y_labels)), columns=range(len(x_labels)), fill_value=0)
+
+    heatmap_data = []
+    for yi in range(len(y_labels)):
+        for xi in range(len(x_labels)):
+            heatmap_data.append([xi, yi, float(agg.iat[yi, xi])])
+
+    values = [item[2] for item in heatmap_data] if heatmap_data else [0]
+    return {
+        'x_labels': x_labels,
+        'y_labels': y_labels,
+        'heatmap_data': heatmap_data,
+        'min_value': min(values),
+        'max_value': max(values),
+        'value_label': value_col or 'count'
+    }
 
 
 @viz_bp.route('/get_data', methods=['POST'])
@@ -23,79 +121,25 @@ def get_data():
     x_col = data.get('x_col')
     y_col = data.get('y_col')
     chart_type = (data.get('chart_type') or 'scatter').lower()
-    max_points = int(data.get('max_points', 2000) or 2000)
-    force_full = bool(data.get('force_full', False))
+    value_col = data.get('value_col')
 
     if x_col not in current_df.columns or y_col not in current_df.columns:
         return jsonify({'code': 400, 'msg': '所选列不存在'}), 400
 
+    if chart_type == 'heatmap':
+        return jsonify({'code': 200, 'data': _build_heatmap_response(current_df, x_col, y_col, value_col)})
+
     df = current_df[[x_col, y_col]].dropna().copy()
-    original_n = len(df)
-
-    # 默认上限，避免用户请求过多数据
-    max_points = min(max_points, 20000)
-
-    downsampled = False
-    df_out = df
-
-    if not force_full and original_n > max_points:
-        downsampled = True
-        try:
-            # 对于折线图/散点图，更好的策略是按 X 排序后均匀抽取索引，保留趋势和顺序
-            x_series = df[x_col]
-            x_num = pd.to_numeric(x_series, errors='coerce')
-            x_dt = pd.to_datetime(x_series, errors='coerce')
-
-            is_numeric = x_num.notna().any()
-            is_datetime = x_dt.notna().any()
-
-            if is_numeric or is_datetime:
-                # 按解析后的 x 排序，均匀取点
-                if is_datetime:
-                    df['_sort_x'] = x_dt
-                else:
-                    df['_sort_x'] = x_num
-
-                df = df.sort_values('_sort_x').reset_index(drop=True)
-                indices = np.linspace(0, len(df) - 1, max_points).astype(int)
-                df_out = df.iloc[indices][[x_col, y_col]].reset_index(drop=True)
-                # 清理临时列（如果存在）
-                df_out = df_out.drop(columns=['_sort_x'], errors='ignore')
-            else:
-                # 非数值/时间型：折线按原序均匀抽样，散点随机采样，柱状取 top
-                if chart_type == 'line':
-                    df = df.reset_index(drop=True)
-                    indices = np.linspace(0, len(df) - 1, max_points).astype(int)
-                    df_out = df.iloc[indices][[x_col, y_col]].reset_index(drop=True)
-                elif chart_type == 'scatter':
-                    df_out = df.sample(n=max_points, random_state=42)[[x_col, y_col]].reset_index(drop=True)
-                else:
-                    top = df[x_col].value_counts().nlargest(max_points).index
-                    df_out = df[df[x_col].isin(top)].groupby(x_col)[y_col].mean().reset_index()
-        except Exception:
-            # 回退到随机采样
-            df_out = df.sample(n=max_points, random_state=42)[[x_col, y_col]].reset_index(drop=True)
-
-    # 准备返回数据
-    x_series = df_out[x_col]
-    y_series = df_out[y_col]
-
-    # 格式化
-    x_values = _series_to_list(pd.to_datetime(x_series) if pd.api.types.is_datetime64_any_dtype(x_series) else x_series)
-    y_values = _series_to_list(y_series)
-
-    meta = {
-        'original_points': int(original_n),
-        'returned_points': int(len(x_values)),
-        'downsampled': bool(downsampled)
-    }
+    if chart_type == 'line':
+        x_kind = _detect_kind(df[x_col])
+        if x_kind in ('numeric', 'datetime'):
+            df = df.assign(_x=_normalize(df[x_col], x_kind)).sort_values('_x')
 
     return jsonify({
         'code': 200,
         'data': {
-            'x_values': x_values,
-            'y_values': y_values,
-            'meta': meta
+            'x_values': _series_to_list(df[x_col]),
+            'y_values': _series_to_list(df[y_col])
         }
     })
 
