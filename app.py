@@ -124,7 +124,7 @@ def detect_delimiter(file_obj, encoding='utf-8'):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('upload.html')
 
 
 # 上传接口
