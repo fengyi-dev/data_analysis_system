@@ -3,121 +3,234 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数据分析 — 线性回归</title>
+    <title>数据分析 - 3D聚类 + 回归</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts-gl@2.0.9/dist/echarts-gl.min.js"></script>
     <style>
-        :root { --sidebar-w: 240px; --primary: #4f6ef7; --primary-dark: #1e3a5f; --success: #22c55e; --bg: #f1f5f9; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg); min-height: 100vh; display: flex; }
-
-        .sidebar { width: var(--sidebar-w); min-height: 100vh; background: linear-gradient(180deg, #fafbfd 0%, #f6f7fb 40%, #f2f4f8 100%); color: #334155; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; box-shadow: 1px 0 0 0 rgba(0,0,0,.04), 4px 0 24px rgba(0,0,0,.05), 12px 0 48px rgba(0,0,0,.025); border-right: 1px solid rgba(0,0,0,.04); }
-        .sidebar .brand { padding: 24px 20px 20px; border-bottom: 1px solid rgba(0,0,0,.06); background: linear-gradient(180deg, rgba(255,255,255,.7) 0%, transparent 100%); }
-        .sidebar .brand h4 { margin: 0; font-weight: 700; font-size: 1.05rem; color: #0f172a; }
-        .sidebar .brand .sub { font-size: .72rem; color: #94a3b8; margin-top: 3px; }
-        .sidebar .nav-list { flex: 1; padding: 12px 8px; list-style: none; }
-        .sidebar .nav-item { display: block; margin-bottom: 2px; }
-        .sidebar .nav-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 0 8px; color: #64748b; border-radius: 10px; text-decoration: none; transition: all .25s cubic-bezier(0.4, 0, 0.2, 1); border-left: none; font-size: .9rem; font-weight: 500; }
-        .sidebar .nav-link:hover { color: #334155; background: linear-gradient(135deg, rgba(79,110,247,.06) 0%, rgba(124,92,231,.04) 100%); }
-        .sidebar .nav-link.active { color: var(--primary); font-weight: 600; background: linear-gradient(135deg, #ffffff 0%, #fafbff 100%); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(79,110,247,.1), 0 8px 32px rgba(79,110,247,.06); border: 1px solid rgba(79,110,247,.08); }
-        .sidebar .nav-link.done { color: #475569; }
-        .sidebar .nav-icon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); display: flex; align-items: center; justify-content: center; font-size: .82rem; font-weight: 700; flex-shrink: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 1px 2px rgba(0,0,0,.04); transition: all .25s cubic-bezier(0.4, 0, 0.2, 1); }
-        .sidebar .nav-link.active .nav-icon { background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 8px rgba(79,110,247,.25); }
-        .sidebar .nav-link.done .nav-icon { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #059669; box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
-
-        .main { margin-left: var(--sidebar-w); flex: 1; width: calc(100% - var(--sidebar-w)); }
-        .content-area { max-width: 1000px; margin: 0 auto; padding: 28px 24px 40px; }
-
-        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); margin-bottom: 16px; }
-        .section-hidden { display: none !important; }
-        .metric-card { background: linear-gradient(135deg, #f8f9ff 0%, #eef1ff 100%); border-radius: 12px; padding: 24px 16px; text-align: center; border: 1px solid #e0e4ff; }
-        .metric-card .metric-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
-        .metric-card .metric-label { font-size: .78rem; color: #94a3b8; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
-        .formula-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 12px 20px; color: #92400e; font-weight: 600; font-size: .95rem; text-align: center; }
-        .nav-row { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
-
-        @media (max-width: 768px) {
-            .sidebar { width: 56px; }
-            .sidebar .brand h4, .sidebar .brand .sub, .sidebar .nav-link span, .sidebar .sidebar-footer { display: none; }
-            .sidebar .nav-link { justify-content: center; padding: 14px 0; }
-            .sidebar .nav-icon { width: 28px; height: 28px; }
-            .main { margin-left: 56px; width: calc(100% - 56px); }
-            :root { --sidebar-w: 56px; }
-        }
+        .chart-container { height: 450px; width: 100%; }
+        .nav-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        @media (max-width: 768px) { .nav-links { justify-content: center; } }
     </style>
 </head>
 
-<body>
+<body class="container mt-4">
+    <!-- 顶部导航栏 -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+        <h3>📊 数据分析：3D聚类 + 回归预测</h3>
+        <div class="nav-links">
+            <a href="/upload.html" class="btn btn-outline-primary btn-sm">📁 上传</a>
+            <a href="/clean.html" class="btn btn-outline-success btn-sm">🧹 清洗</a>
+            <a href="/analyze.html" class="btn btn-primary btn-sm">📈 分析</a>
+            <a href="/view.html" class="btn btn-outline-info btn-sm">👁️ 可视化</a>
+            <a href="/export" class="btn btn-outline-secondary btn-sm">💾 导出</a>
+        </div>
+    </div>
 
-<aside class="sidebar">
-    <div class="brand"><h4>📊 数据分析</h4><div class="sub">交互式分析系统</div></div>
-    <ul class="nav-list">
-        <li class="nav-item"><a href="/upload.html" class="nav-link done"><span class="nav-icon">✓</span><span>数据上传</span></a></li>
-        <li class="nav-item"><a href="/clean.html" class="nav-link done"><span class="nav-icon">✓</span><span>数据清洗</span></a></li>
-        <li class="nav-item"><a href="/analyze.html" class="nav-link active"><span class="nav-icon">3</span><span>数据分析</span></a></li>
-        <li class="nav-item"><a href="/view.html" class="nav-link"><span class="nav-icon">4</span><span>数据可视化</span></a></li>
-        <li class="nav-item"><a href="/export" class="nav-link"><span class="nav-icon">5</span><span>导出数据</span></a></li>
-    </ul>
+    <!-- 参数选择 -->
+    <div class="card p-3 mb-3">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label>X 轴字段</label>
+                <select id="xCol" class="form-select"></select>
+            </div>
+            <div class="col-md-3">
+                <label>Y 轴字段</label>
+                <select id="yCol" class="form-select"></select>
+            </div>
+            <div class="col-md-3">
+                <label>Z 轴字段（聚类）</label>
+                <select id="zCol" class="form-select">
+                    <option value="">不使用</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label>聚类数</label>
+                <select id="kValue" class="form-select">
+                    <option value="2">2 类</option>
+                    <option value="3" selected>3 类</option>
+                    <option value="4">4 类</option>
+                    <option value="5">5 类</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button id="analyzeBtn" class="btn btn-primary w-100">分析</button>
+            </div>
+        </div>
+    </div>
 
-</aside>
-
-<div class="main">
-<div class="content-area">
-
-    <!-- 选列 -->
-    <div class="card">
+    <!-- 3D 聚类图 -->
+    <div class="card mb-3">
+        <div class="card-header">🔍 K-Means 3D 聚类（可拖拽旋转）</div>
         <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold small text-secondary">X 自变量（特征列）</label>
-                    <select id="ax" class="form-select"></select>
+            <div id="clusterChart" class="chart-container"></div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">📐 线性回归结果</div>
+                <div class="card-body" id="regressResult">
+                    <p class="text-muted">点击"分析"查看结果</p>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold small text-secondary">Y 因变量（目标列）</label>
-                    <select id="ay" class="form-select"></select>
-                </div>
-                <div class="col-md-4">
-                    <button id="anaBtn" class="btn btn-warning fw-semibold w-100">🔍 开始分析</button>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header">📈 回归线（实际值 vs 预测值）</div>
+                <div class="card-body">
+                    <div id="regressChart" class="chart-container" style="height: 350px;"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 结果 -->
-    <div class="section-hidden" id="resultRow">
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                <div class="metric-card"><div class="metric-value" id="r2">—</div><div class="metric-label">R² 决定系数</div></div>
-            </div>
-            <div class="col-md-3">
-                <div class="metric-card"><div class="metric-value" id="slope">—</div><div class="metric-label">斜率 Slope</div></div>
-            </div>
-            <div class="col-md-3">
-                <div class="metric-card"><div class="metric-value" id="inter">—</div><div class="metric-label">截距 Intercept</div></div>
-            </div>
-            <div class="col-md-3">
-                <div class="metric-card"><div class="metric-value" id="nSamples">—</div><div class="metric-label">样本数量</div></div>
-            </div>
-        </div>
-        <div class="formula-box" id="formulaText"></div>
-    </div>
-
-    <div class="nav-row">
+    <div class="mt-3 text-center">
         <a href="/clean.html" class="btn btn-outline-secondary">← 返回清洗</a>
-        <a href="/view.html" id="btnNextView" class="btn btn-primary shadow-sm disabled">下一步：数据可视化 →</a>
+        <a href="/view.html" id="nextBtn" class="btn btn-primary ms-2 disabled">下一步：可视化 →</a>
     </div>
 
-</div>
-</div>
+    <script>
+        let clusterChart = null;
+        let regressChart = null;
 
-<script>
-    var cols=JSON.parse(localStorage.getItem('cols')||'[]'),sx=localStorage.getItem('selectedX')||'',sy=localStorage.getItem('selectedY')||'';
-    cols.forEach(function(c){var x=c===sx?' selected':'';var y=c===sy?' selected':'';$('#ax').append('<option'+x+'>'+c+'</option>');$('#ay').append('<option'+y+'>'+c+'</option>')});
-    if(sx&&sy){$('#ax').val(sx);$('#ay').val(sy)}
-    function showErr(m){$('#anaErr').remove();$('#anaBtn').after('<div class="alert alert-warning mt-2 py-1 small" id="anaErr">'+m+'</div>');setTimeout(function(){$('#anaErr').remove()},5000)}
-    $('#anaBtn').click(function(){var x=$('#ax').val(),y=$('#ay').val();if(!x||!y){alert('请选择字段');return}localStorage.setItem('selectedX',x);localStorage.setItem('selectedY',y);$('#anaErr').remove();$.ajax({url:'/analyze',type:'POST',contentType:'application/json',data:JSON.stringify({x_col:x,y_col:y}),success:function(r){if(r.code!==200){showErr('⚠ '+(r.msg||'分析失败'));return}$('#r2').text(r.data.r2_score);$('#slope').text(r.data.slope);$('#inter').text(r.data.intercept);$('#nSamples').text(r.data.predictions.length);var s=r.data.intercept>=0?'+':'';$('#formulaText').html('📐 回归方程：<strong>Y = '+r.data.slope+' × X '+s+' '+r.data.intercept+'</strong>  |  R² = '+r.data.r2_score+'  |  样本数 = '+r.data.predictions.length);$('#resultRow').removeClass('section-hidden');$('#btnNextView').removeClass('disabled')},error:function(x){try{var e=JSON.parse(x.responseText);showErr('⚠ '+(e.msg||'请求失败'))}catch(c){showErr('⚠ 请求失败，请确认已上传数据')}}})});
-    if(sx&&sy)setTimeout(function(){$('#anaBtn').click()},300)
-</script>
+        $(document).ready(function() {
+            clusterChart = echarts.init(document.getElementById('clusterChart'));
+            regressChart = echarts.init(document.getElementById('regressChart'));
+            loadColumns();
+        });
+
+        function loadColumns() {
+            let cols = JSON.parse(localStorage.getItem('cols') || '[]');
+            let savedX = localStorage.getItem('selectedX') || '';
+            let savedY = localStorage.getItem('selectedY') || '';
+            cols.forEach(c => {
+                let selX = (c === savedX) ? ' selected' : '';
+                let selY = (c === savedY) ? ' selected' : '';
+                $('#xCol').append(`<option${selX}>${c}</option>`);
+                $('#yCol').append(`<option${selY}>${c}</option>`);
+                $('#zCol').append(`<option>${c}</option>`);
+            });
+            if (savedX && savedY) {
+                $('#xCol').val(savedX);
+                $('#yCol').val(savedY);
+            }
+        }
+
+        $('#analyzeBtn').click(function() {
+            let x = $('#xCol').val();
+            let y = $('#yCol').val();
+            let z = $('#zCol').val();
+            let k = $('#kValue').val();
+            if (!x || !y) { alert('请选择 X 和 Y 字段'); return; }
+
+            $('#analyzeBtn').text('分析中...').prop('disabled', true);
+            $.ajax({
+                url: '/analyze',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ 
+                    x_col: x, y_col: y, z_col: z,
+                    do_cluster: !!z, 
+                    n_clusters: parseInt(k) 
+                }),
+                success: function(res) {
+                    if (res.code === 200) {
+                        let data = res.data;
+                        if (data.cluster_3d && !data.cluster_3d.error) {
+                            draw3DCluster(data.cluster_3d);
+                        } else if (data.cluster_3d && data.cluster_3d.error) {
+                            $('#clusterChart').parent().parent().find('.card-body').html('<div class="alert alert-warning">' + data.cluster_3d.error + '</div>');
+                        }
+                        if (data.regression) {
+                            displayRegression(data.regression);
+                            drawRegressChart(data.regression, x, y);
+                            $('#nextBtn').removeClass('disabled');
+                        }
+                    } else {
+                        alert('分析失败：' + res.msg);
+                    }
+                },
+                error: function() { alert('请求失败，请检查后端'); },
+                complete: function() { $('#analyzeBtn').text('分析').prop('disabled', false); }
+            });
+        });
+
+        function draw3DCluster(data) {
+            if (clusterChart) clusterChart.resize();
+            let colors = ['#5470c6', '#fac858', '#ee6666', '#73c0de', '#3ba272'];
+            let points = [];
+            for (let i = 0; i < data.data.length; i++) {
+                points.push({
+                    value: [data.data[i][0], data.data[i][1], data.data[i][2]],
+                    label: data.labels[i]
+                });
+            }
+            let seriesData = points.map(p => ({
+                value: p.value,
+                itemStyle: { color: colors[p.label % colors.length] }
+            }));
+
+            let option = {
+                title: { text: '3D 聚类结果 (K=' + data.n_clusters + ')' },
+                tooltip: { trigger: 'item', formatter: function(params) {
+                    return `聚类类别: ${params.data.label + 1}<br>值: [${params.value.join(', ')}]`;
+                }},
+                xAxis3D: { name: data.features[0] },
+                yAxis3D: { name: data.features[1] },
+                zAxis3D: { name: data.features[2] },
+                grid3D: { viewControl: { autoRotate: false, distance: 200 } },
+                series: [{
+                    type: 'scatter3D',
+                    data: seriesData,
+                    symbolSize: 6
+                }]
+            };
+            clusterChart.setOption(option);
+        }
+
+        function displayRegression(data) {
+            let html = `
+                <div class="alert alert-success p-2 text-center">
+                    <h5>R² 分数</h5>
+                    <h3>${data.r2_score}</h3>
+                    <small>越接近1拟合越好</small>
+                </div>
+                <hr>
+                <p><strong>斜率:</strong> ${data.slope}</p>
+                <p><strong>截距:</strong> ${data.intercept}</p>
+                <p><strong>方程:</strong> y = ${data.slope} x + ${data.intercept}</p>
+            `;
+            $('#regressResult').html(html);
+        }
+
+        function drawRegressChart(regData, xName, yName) {
+            $.ajax({
+                url: '/get_data',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ x_col: xName, y_col: yName }),
+                success: function(res) {
+                    if (res.code === 200) {
+                        let xData = res.data.x_values;
+                        let yData = res.data.y_values;
+                        regressChart.setOption({
+                            title: { text: '回归效果' },
+                            tooltip: { trigger: 'axis' },
+                            xAxis: { name: xName },
+                            yAxis: { name: yName },
+                            series: [
+                                { name: '实际值', type: 'scatter', data: xData.map((x, i) => [x, yData[i]]), itemStyle: { color: '#5470c6' } },
+                                { name: '回归线', type: 'line', data: xData.map((x, i) => [x, regData.predictions[i]]), lineStyle: { color: '#ee6666', width: 2 } }
+                            ]
+                        });
+                    }
+                }
+            });
+        }
+    </script>
 </body>
+
 </html>

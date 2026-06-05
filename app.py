@@ -6,6 +6,7 @@ import chardet
 import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_file
 from sklearn.linear_model import LinearRegression
+from sklearn.cluster import KMeans  
 from werkzeug.utils import secure_filename
 from data_cleaner import analyze_quality, apply_cleaning
 
@@ -201,52 +202,44 @@ def analyze():
         return jsonify({'code': 400, 'msg': '请先上传数据'})
 
     data = request.json
-    x_col = data.get('x_col')
-    y_col = data.get('y_col')
-    do_cluster = data.get('do_cluster', True)  # 是否做聚类
-    n_clusters = data.get('n_clusters', 3)
+    x, y, z = data.get('x_col'), data.get('y_col'), data.get('z_col')
+    k = data.get('n_clusters', 3)
 
-    if x_col not in current_df.columns or y_col not in current_df.columns:
+    if x not in current_df.columns or y not in current_df.columns:
         return jsonify({'code': 400, 'msg': '所选列不存在'})
+    if z and z not in current_df.columns:
+        return jsonify({'code': 400, 'msg': f'列 {z} 不存在'})
 
     try:
-        df = current_df[[x_col, y_col]].dropna()
-        X = df[[x_col]].values
-        y = df[y_col].values
-
+        # 线性回归
+        df_reg = current_df[[x, y]].dropna()
+        X, Y = df_reg[[x]].values, df_reg[y].values
         if len(X) < 2:
-            return jsonify({'code': 400, 'msg': '有效数据点不足'})
-
-        # ========== 1. 线性回归 ==========
-        model = LinearRegression()
-        model.fit(X, y)
-        predictions = model.predict(X)
-
+            return jsonify({'code': 400, 'msg': '数据点不足'})
+        model = LinearRegression().fit(X, Y)
+        
         result = {
             'regression': {
-                'r2_score': round(model.score(X, y), 4),
+                'r2_score': round(model.score(X, Y), 4),
                 'slope': round(model.coef_[0], 4),
                 'intercept': round(model.intercept_, 4),
-                'predictions': predictions.tolist()
+                'predictions': model.predict(X).tolist()
             }
         }
 
-        # ========== 2. K-Means 聚类 ==========
-        if do_cluster:
-            from sklearn.cluster import KMeans
-            X_cluster = df[[x_col, y_col]].values
-            if len(X_cluster) >= n_clusters:
-                kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-                labels = kmeans.fit_predict(X_cluster)
-                result['cluster'] = {
+        # 3D聚类
+        if z:
+            df_cls = current_df[[x, y, z]].dropna()
+            if len(df_cls) >= k:
+                labels = KMeans(n_clusters=k, random_state=42).fit_predict(df_cls.values)
+                result['cluster_3d'] = {
                     'labels': labels.tolist(),
-                    'centers': kmeans.cluster_centers_.tolist(),
-                    'n_clusters': n_clusters,
-                    'x_values': df[x_col].values.tolist(),
-                    'y_values': df[y_col].values.tolist()
+                    'features': [x, y, z],
+                    'data': df_cls.values.tolist(),
+                    'n_clusters': k
                 }
             else:
-                result['cluster'] = {'error': f'数据点不足，至少需要{n_clusters}行'}
+                result['cluster_3d'] = {'error': f'数据点不足，至少需要{k}行'}
 
         return jsonify({'code': 200, 'data': result})
 
