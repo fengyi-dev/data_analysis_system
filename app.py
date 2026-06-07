@@ -1,223 +1,74 @@
-import io
-import os
+"""
+app.py — 数据分析系统主入口
+=============================
+注册各功能模块的 Blueprint，提供共用配置和路由。
+各模块文件：
+  - upload.py  → 任务A：数据上传 + 预览
+  - viz.py     → 任务C：可视化
+  - data_cleaner.py → 任务B：数据清洗（质量分析 + 自动清洗）
+"""
+
 import traceback
 
-import chardet
 import pandas as pd
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, jsonify, render_template, request
 from sklearn.linear_model import LinearRegression
-from sklearn.cluster import KMeans  
-from werkzeug.utils import secure_filename
+from sklearn.cluster import KMeans
+
+# ---------------------------------------------------------------------------
+# 注册 Blueprint
+# ---------------------------------------------------------------------------
+from upload import upload_bp
+from viz import viz_bp
 from data_cleaner import analyze_quality, apply_cleaning
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024   # 100MB 上传限制
+app.config['CURRENT_DF'] = None                         # 当前数据（各模块共享）
+app.config['CURRENT_FILENAME'] = None                   # 当前文件名
 
-# 配置文件上传限制：最大 100MB
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
-
-# 同步当前数据到 app.config（供 blueprint 使用）
-app.config['CURRENT_DF'] = None
-app.config['CURRENT_FILENAME'] = None
-
-# 注册可视化 blueprint（在 viz.py 中实现）
-from viz import viz_bp
+app.register_blueprint(upload_bp)
 app.register_blueprint(viz_bp)
 
-# 全局变量存储当前数据
-current_df = None
-current_filename = None
+# ---------------------------------------------------------------------------
+# 工具函数：获取当前 DataFrame
+# ---------------------------------------------------------------------------
 
-ALLOWED_EXTENSIONS = {'.csv', '.xlsx', '.xls'}
+def get_current_df():
+    """从 app.config 获取当前 DataFrame（统一入口）"""
+    return app.config.get('CURRENT_DF')
 
+def get_current_filename():
+    """从 app.config 获取当前文件名"""
+    return app.config.get('CURRENT_FILENAME')
 
-def allowed_file(filename):
-    """检查文件扩展名是否允许"""
-    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
+# ---------------------------------------------------------------------------
+# 路由：分析（线性回归 + 3D 聚类）
+# ---------------------------------------------------------------------------
 
-
-def safe_json_serialize(df, rows=10):
-    """
-    将 DataFrame 安全地转换为 JSON 可序列化格式。
-    处理 NaN、Infinity、日期时间等特殊类型。
-    """
-    # 用 head() 避免复制整个 df
-    preview_df = df.head(rows).copy()
-
-    # 将 NaN 替换为 None，datetime 转为字符串
-    for col in preview_df.columns:
-        if pd.api.types.is_datetime64_any_dtype(preview_df[col]):
-            preview_df[col] = preview_df[col].astype(str)
-        elif pd.api.types.is_numeric_dtype(preview_df[col]):
-            preview_df[col] = preview_df[col].where(preview_df[col].notna(), None)
-
-    rows_data = preview_df.values.tolist()
-    # 二次处理：确保每行中的 NaN/NaT 转为 None
-    rows_data = [
-        [None if (isinstance(cell, float) and pd.isna(cell)) or cell is pd.NA else cell
-         for cell in row]
-        for row in rows_data
-    ]
-
-    return {
-        'columns': df.columns.tolist(),
-        'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
-        'rows': rows_data,
-        'shape': list(df.shape),
-    }
-
-
-def detect_encoding(file_obj):
-    """检测文件的编码格式"""
-    # 保存文件指针位置
-    pos = file_obj.tell()
-    raw_data = file_obj.read(10000)
-    file_obj.seek(pos)  # 恢复指针
-
-    if not raw_data:
-        return 'utf-8'
-
-    result = chardet.detect(raw_data)
-    encoding = result.get('encoding', 'utf-8') or 'utf-8'
-    # 统一常见别名
-    encoding = encoding.lower().replace('gb2312', 'gbk').replace('gb18030', 'gbk')
-    return encoding
-
-
-def detect_delimiter(file_obj, encoding='utf-8'):
-    """自动检测 CSV 的分隔符"""
-    pos = file_obj.tell()
-    try:
-        sample = file_obj.read(4096).decode(encoding)
-    except (UnicodeDecodeError, UnicodeError):
-        file_obj.seek(pos)
-        sample = file_obj.read(4096).decode(encoding, errors='replace')
-    file_obj.seek(pos)
-
-    lines = sample.split('\n')
-    if not lines:
-        return ','
-
-    # 取前几行（跳过空行）
-    header_line = None
-    for line in lines:
-        line = line.strip()
-        if line:
-            header_line = line
-            break
-
-    if not header_line:
-        return ','
-
-    # 尝试常见分隔符，选解析出最多列的那个
-    delimiters = [',', ';', '\t', '|']
-    best_delim = ','
-    best_count = 0
-
-    for delim in delimiters:
-        count = len(header_line.split(delim))
-        if count > best_count:
-            best_count = count
-            best_delim = delim
-
-    return best_delim
-
-
-@app.route('/')
-def index():
-    return render_template('upload.html')
-
-
-# 上传接口
-@app.route('/upload', methods=['POST'])
-def upload():
-    global current_df, current_filename
-
-    # 校验是否有文件
-    if 'file' not in request.files:
-        return jsonify({'code': 400, 'msg': '请求中没有文件'})
-
-    file = request.files['file']
-    if not file.filename:
-        return jsonify({'code': 400, 'msg': '未选择文件'})
-
-    # 校验文件类型
-    if not allowed_file(file.filename):
-        return jsonify({'code': 400, 'msg': '只支持 CSV / Excel 文件（.csv/.xlsx/.xls）'})
-
-    filename = secure_filename(file.filename)
-    ext = os.path.splitext(filename.lower())[1]
-
-    try:
-        if ext == '.csv':
-            # 自动检测编码和分隔符
-            encoding = detect_encoding(file)
-            delimiter = detect_delimiter(file, encoding)
-            try:
-                current_df = pd.read_csv(file, encoding=encoding, delimiter=delimiter)
-            except UnicodeDecodeError:
-                # 编码检测失败时回退
-                file.seek(0)
-                current_df = pd.read_csv(file, encoding='utf-8', errors='replace', delimiter=delimiter)
-        else:
-            # Excel 文件
-            try:
-                current_df = pd.read_excel(file, engine='openpyxl')
-            except Exception:
-                file.seek(0)
-                current_df = pd.read_excel(file, engine='xlrd')
-
-        # 记录文件名
-        current_filename = filename
-
-        # 空数据检查
-        if current_df.empty:
-            return jsonify({'code': 400, 'msg': '文件为空，请检查数据'})
-
-        # 同步到 app.config 供可视化 blueprint 使用
-        app.config['CURRENT_DF'] = current_df
-        app.config['CURRENT_FILENAME'] = current_filename
-
-        preview = safe_json_serialize(current_df)
-        preview['filename'] = filename
-
-        return jsonify({
-            'code': 200,
-            'data': preview,
-            'msg': f'上传成功 — 共 {preview["shape"][0]} 行 × {preview["shape"][1]} 列'
-        })
-
-    except pd.errors.EmptyDataError:
-        return jsonify({'code': 400, 'msg': '文件为空，无法读取'})
-    except pd.errors.ParserError as e:
-        return jsonify({'code': 400, 'msg': f'文件解析失败：{str(e)}'})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'code': 500, 'msg': f'读取文件失败：{str(e)}'})
-
-# 分析接口
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    global current_df
-    if current_df is None:
+    df = get_current_df()
+    if df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'})
 
     data = request.json
     x, y, z = data.get('x_col'), data.get('y_col'), data.get('z_col')
     k = data.get('n_clusters', 3)
 
-    if x not in current_df.columns or y not in current_df.columns:
+    if x not in df.columns or y not in df.columns:
         return jsonify({'code': 400, 'msg': '所选列不存在'})
-    if z and z not in current_df.columns:
+    if z and z not in df.columns:
         return jsonify({'code': 400, 'msg': f'列 {z} 不存在'})
 
     try:
-        # 线性回归
-        df_reg = current_df[[x, y]].dropna()
+        # --- 线性回归 ---
+        df_reg = df[[x, y]].dropna()
         X, Y = df_reg[[x]].values, df_reg[y].values
         if len(X) < 2:
             return jsonify({'code': 400, 'msg': '数据点不足'})
         model = LinearRegression().fit(X, Y)
-        
+
         result = {
             'regression': {
                 'r2_score': round(model.score(X, Y), 4),
@@ -227,9 +78,9 @@ def analyze():
             }
         }
 
-        # 3D聚类
+        # --- 3D 聚类（当提供了 z 列时） ---
         if z:
-            df_cls = current_df[[x, y, z]].dropna()
+            df_cls = df[[x, y, z]].dropna()
             if len(df_cls) >= k:
                 labels = KMeans(n_clusters=k, random_state=42).fit_predict(df_cls.values)
                 result['cluster_3d'] = {
@@ -246,90 +97,93 @@ def analyze():
     except Exception as e:
         return jsonify({'code': 400, 'msg': f'分析失败：{str(e)}'})
 
-# 清洗接口
+# ---------------------------------------------------------------------------
+# 路由：清洗（任务B 基础版）
+# ---------------------------------------------------------------------------
+
 @app.route('/clean', methods=['POST'])
 def clean():
-    global current_df
-    if current_df is None:
+    df = get_current_df()
+    if df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     data = request.json
-    method = data.get('method', 'drop')  # drop / fill_mean / fill_median
-    columns = data.get('columns', current_df.columns.tolist())
+    method = data.get('method', 'drop')
+    columns = data.get('columns', df.columns.tolist())
 
-    df = current_df.copy()
+    df_copy = df.copy()
 
     if method == 'drop':
-        df = df[columns].dropna()
+        df_copy = df_copy[columns].dropna()
     elif method == 'fill_mean':
         for col in columns:
-            if col in df.columns and df[col].dtype in ('float64', 'int64'):
-                df[col] = df[col].fillna(df[col].mean())
+            if col in df_copy.columns and df_copy[col].dtype in ('float64', 'int64'):
+                df_copy[col] = df_copy[col].fillna(df_copy[col].mean())
     elif method == 'fill_median':
         for col in columns:
-            if col in df.columns and df[col].dtype in ('float64', 'int64'):
-                df[col] = df[col].fillna(df[col].median())
+            if col in df_copy.columns and df_copy[col].dtype in ('float64', 'int64'):
+                df_copy[col] = df_copy[col].fillna(df_copy[col].median())
 
-    current_df = df
-
-    # 同步到 app.config
-    app.config['CURRENT_DF'] = current_df
+    app.config['CURRENT_DF'] = df_copy
 
     return jsonify({
         'code': 200,
         'data': {
-            'columns': df.columns.tolist(),
-            'rows': df.head(10).values.tolist(),
-            'shape': list(df.shape),
-            'null_count': int(df.isnull().sum().sum())
+            'columns': df_copy.columns.tolist(),
+            'rows': df_copy.head(10).values.tolist(),
+            'shape': list(df_copy.shape),
+            'null_count': int(df_copy.isnull().sum().sum())
         },
-        'msg': f'cleaning done, {df.shape[0]} rows x {df.shape[1]} cols'
+        'msg': f'清洗完成，{df_copy.shape[0]} 行 × {df_copy.shape[1]} 列'
     })
 
+# ---------------------------------------------------------------------------
+# 路由：数据质量分析（任务B 增强版）
+# ---------------------------------------------------------------------------
 
-# 数据质量分析接口（缺失值 + 异常值检测）
 @app.route('/data_quality', methods=['GET'])
 def data_quality():
-    global current_df
-    if current_df is None:
+    df = get_current_df()
+    if df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     try:
-        report = analyze_quality(current_df)
+        report = analyze_quality(df)
     except Exception as e:
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'质量检测异常: {str(e)}'}), 500
 
     return jsonify({'code': 200, 'data': report})
 
+# ---------------------------------------------------------------------------
+# 路由：自动清洗（任务B 增强版）
+# ---------------------------------------------------------------------------
 
-# 自动清洗接口（按配置规则执行）
 @app.route('/auto_clean', methods=['POST'])
 def auto_clean():
-    global current_df
-    if current_df is None:
+    df = get_current_df()
+    if df is None:
         return jsonify({'code': 400, 'msg': '请先上传数据'}), 400
 
     config = request.json
-    before_shape = current_df.shape
+    before_shape = df.shape
 
     try:
-        current_df, result = apply_cleaning(current_df, config)
+        df, result = apply_cleaning(df, config)
     except Exception as e:
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'清洗出错: {str(e)}'}), 500
 
-    # 同步到 app.config
-    app.config['CURRENT_DF'] = current_df
+    app.config['CURRENT_DF'] = df
 
-    after_shape = current_df.shape
+    after_shape = df.shape
     details = '\n'.join(result['details']) if result['details'] else '无需处理'
 
     return jsonify({
         'code': 200,
         'data': {
-            'columns': current_df.columns.tolist(),
-            'rows': current_df.head(10).values.tolist(),
+            'columns': df.columns.tolist(),
+            'rows': df.head(10).values.tolist(),
             'shape': list(after_shape),
             'report': {
                 'rows_before': result['rows_before'],
@@ -341,54 +195,29 @@ def auto_clean():
         'msg': f'自动清洗完成：{before_shape[0]}行 → {after_shape[0]}行（移除 {result["rows_dropped"]} 行）'
     })
 
+# ---------------------------------------------------------------------------
+# 路由：页面导航
+# ---------------------------------------------------------------------------
 
-# 获取数据接口已迁移到 viz.py（Blueprint）
+@app.route('/clean.html')
+def go_clean():
+    return render_template('clean.html')
 
+@app.route('/analyze.html')
+def go_analyze():
+    return render_template('analyze.html')
 
-# 导出接口
-@app.route('/export', methods=['GET'])
-def export():
-    global current_df, current_filename
-    if current_df is None:
-        return jsonify({'code': 400, 'msg': '没有可导出的数据'}), 400
+# ---------------------------------------------------------------------------
+# 错误处理
+# ---------------------------------------------------------------------------
 
-    output = io.BytesIO()
-    current_df.to_csv(output, index=False, encoding='utf-8-sig')
-    output.seek(0)
-
-    # 使用原始文件名或默认名
-    download_name = current_filename or 'cleaned_data.csv'
-    if download_name.endswith(('.xlsx', '.xls')):
-        download_name = download_name.rsplit('.', 1)[0] + '.csv'
-    elif not download_name.endswith('.csv'):
-        download_name += '.csv'
-
-    return send_file(
-        output,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=download_name
-    )
-
-# 自定义错误处理
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({'code': 413, 'msg': '文件过大，最大支持 100MB'})
 
-@app.route('/upload.html')
-def go_upload():
-    return render_template("upload.html")
-
-@app.route('/clean.html')
-def go_clean():
-    return render_template("clean.html")
-
-# `/view.html` 路由已迁移到 `viz.py` 中的 Blueprint（保留此处注释以便追踪）
-
-@app.route('/analyze.html')
-def go_analyze():
-    return render_template("analyze.html")
+# ---------------------------------------------------------------------------
+# 启动
+# ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     app.run(debug=True)
-    
