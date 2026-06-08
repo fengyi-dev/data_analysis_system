@@ -5,18 +5,16 @@ upload.py — 任务A：数据上传 + 预览
   1. 文件上传（CSV / Excel），含编码自动检测与分隔符识别
   2. 读取后返回前10行预览 + 列名 + 数据类型
   3. 后端：Flask Blueprint 接收文件，pandas 读取
-  4. 数据导出为 CSV
 
 架构：Flask Blueprint，通过 current_app.config 与主应用共享 DataFrame
 """
 
-import io
 import os
 import traceback
 
 import chardet
 import pandas as pd
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
 # ---------------------------------------------------------------------------
@@ -119,22 +117,6 @@ def detect_delimiter(file_obj, encoding='utf-8'):
     return best_delim
 
 # ---------------------------------------------------------------------------
-# 路由：首页 → 上传页面
-# ---------------------------------------------------------------------------
-
-@upload_bp.route('/')
-def index():
-    """首页 → 上传页面"""
-    from flask import render_template
-    return render_template('upload.html')
-
-
-@upload_bp.route('/upload.html')
-def go_upload():
-    from flask import render_template
-    return render_template('upload.html')
-
-# ---------------------------------------------------------------------------
 # 路由：上传文件（任务A核心）
 # ---------------------------------------------------------------------------
 
@@ -206,34 +188,3 @@ def upload():
     except Exception as e:
         traceback.print_exc()
         return jsonify({'code': 500, 'msg': f'读取文件失败：{str(e)}'})
-
-# ---------------------------------------------------------------------------
-# 路由：导出 CSV
-# ---------------------------------------------------------------------------
-
-@upload_bp.route('/export', methods=['GET'])
-def export():
-    """将当前 DataFrame 导出为 CSV 文件下载"""
-    df = current_app.config.get('CURRENT_DF')
-    filename = current_app.config.get('CURRENT_FILENAME')
-
-    if df is None:
-        return jsonify({'code': 400, 'msg': '没有可导出的数据'}), 400
-
-    output = io.BytesIO()
-    df.to_csv(output, index=False, encoding='utf-8-sig')
-    output.seek(0)
-
-    # 使用原始文件名或默认名
-    download_name = filename or 'cleaned_data.csv'
-    if download_name.endswith(('.xlsx', '.xls')):
-        download_name = download_name.rsplit('.', 1)[0] + '.csv'
-    elif not download_name.endswith('.csv'):
-        download_name += '.csv'
-
-    return send_file(
-        output,
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=download_name
-    )
