@@ -135,17 +135,20 @@
 
         function detectAxisType(values) {
             if (!values.length) return 'category';
+            // 先判断是否全为数字（优先），再判断是否为日期字符串
+            var isNumeric = values.every(function (value) {
+                return value != null && value !== '' && !isNaN(Number(value));
+            });
+            if (isNumeric) return 'value';
             var isDate = values.every(function (value) {
                 return value != null && value !== '' && !isNaN(new Date(value).getTime());
             });
             if (isDate) return 'time';
-            var isNumeric = values.every(function (value) {
-                return value != null && value !== '' && !isNaN(Number(value));
-            });
-            return isNumeric ? 'value' : 'category';
+            return 'category';
         }
 
         function renderHeatmap(data) {
+            chart.clear();
             chart.setOption({
                 title: { text: '热力图', left: 'center' },
                 tooltip: {
@@ -165,13 +168,51 @@
             var xValues = data.x_values || [];
             var yValues = data.y_values || [];
             var axisType = detectAxisType(xValues);
-            var seriesData = axisType === 'category' ? yValues : xValues.map(function (x, i) { return [x, yValues[i]]; });
+
+            // 分类轴：使用类别数组与对应的 y 值
+            if (axisType === 'category') {
+                chart.clear();
+                chart.setOption({
+                    title: { text: $('#chartType option:selected').text(), left: 'center' },
+                    tooltip: { trigger: 'axis' },
+                    xAxis: { type: 'category', data: xValues },
+                    yAxis: { type: 'value' },
+                    series: [{ type: chartType, data: yValues }]
+                });
+                return;
+            }
+
+            // 非分类轴（数值或时间）：构建 [x,y] 对并按 x 排序，保证连线顺序正确
+            var pairs = [];
+            for (var i = 0; i < Math.min(xValues.length, yValues.length); i++) {
+                var xv = xValues[i];
+                var yv = yValues[i];
+                if (xv == null || xv === '' || yv == null || yv === '') continue;
+                if (axisType === 'value') {
+                    var nx = Number(xv);
+                    if (isNaN(nx)) continue;
+                    pairs.push([nx, Number(yv)]);
+                } else {
+                    // time
+                    var dt = new Date(xv);
+                    if (isNaN(dt.getTime())) continue;
+                    pairs.push([dt.toISOString(), Number(yv)]);
+                }
+            }
+
+            pairs.sort(function (a, b) {
+                if (a[0] < b[0]) return -1;
+                if (a[0] > b[0]) return 1;
+                return 0;
+            });
+
+            chart.clear();
             chart.setOption({
                 title: { text: $('#chartType option:selected').text(), left: 'center' },
                 tooltip: { trigger: 'axis' },
-                xAxis: { type: axisType, data: axisType === 'category' ? xValues : undefined },
+                xAxis: { type: axisType === 'value' ? 'value' : 'time' },
                 yAxis: { type: 'value' },
-                series: [{ type: chartType, data: seriesData }]
+                series: [{ type: chartType, data: pairs, showSymbol: true, symbolSize: 6 }]
             });
         }
 

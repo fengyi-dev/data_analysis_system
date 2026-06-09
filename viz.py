@@ -98,6 +98,20 @@ def get_data():
         return jsonify({'code': 200, 'data': _build_heatmap_response(current_df, x_col, y_col, value_col)})
 
     df = current_df[[x_col, y_col]].dropna().copy()
+    # 为折线图等需要按 X 轴顺序连接的图表，先尝试将 X 解析为 datetime 或 numeric，然后基于解析结果排序
+    # 如果解析为 datetime 成功（任一非空），优先使用 datetime 排序；否则尝试 numeric；否则按字符串排序
+    x_dt = pd.to_datetime(df[x_col], errors='coerce')
+    if x_dt.notna().any():
+        df['_x_sort'] = x_dt
+    else:
+        x_num = pd.to_numeric(df[x_col], errors='coerce')
+        if x_num.notna().any():
+            df['_x_sort'] = x_num
+        else:
+            df['_x_sort'] = df[x_col].astype(str)
+
+    df = df.sort_values('_x_sort').drop(columns=['_x_sort'])
+
     return jsonify({'code': 200, 'data': {'x_values': _series_to_list(df[x_col]), 'y_values': _series_to_list(df[y_col])}})
 
 
